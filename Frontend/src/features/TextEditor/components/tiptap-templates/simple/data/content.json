@@ -1,0 +1,26 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": {
+        "textAlign": null,
+        "level": "4",
+        "color": null,
+        "href": null,
+        "target": null,
+        "src": null,
+        "title": null,
+        "alt": null,
+        "checked": false,
+        "class": null
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Heading"
+        }
+      ]
+    }
+  ]
+}

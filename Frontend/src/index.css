@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@import "./styles/_variables.scss";
+@import "./styles/_keyframe-animations.scss";
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  font-family: "Montserrat";
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+@layer utilities {
+  .gradient-border {
+    border: 2px solid transparent;
+    background-image:
+      linear-gradient(white, white),
+      linear-gradient(
+        to bottom right,
+        theme("color.stone.300"),
+        theme("color.stone.200"),
+        theme("color.stone.300")
+      );
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+  }
+}
+
+@layer utilities {
+  .dotted-background {
+    border: 2.2px solid transparent;
+    background-image:
+      radial-gradient(theme("color.zinc.200") 1.5px, transparent 0px),
+      radial-gradient(theme("color.zinc.200") 1.5px, transparent 0px),
+      linear-gradient(white, white),
+      linear-gradient(
+        to bottom right,
+        theme("color.stone.300"),
+        theme("color.stone.200"),
+        theme("color.stone.300")
+      );
+
+    background-clip: padding-box, padding-box, padding-box, border-box;
+    background-origin: border-box;
+    background-size: 8px 8px;
+    background-position:
+      0 0,
+      12px 12px;
+  }
+}
+
+.underline-animation {
+  position: relative;
+  display: inline-block;
+  text-decoration: none;
+  color: #374151;
+  font-weight: 500;
+  padding: 8px 0;
+}
+
+.underline-animation::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 100%;
+  background-color: #3b82f6;
+  transform: scaleX(0);
+  transition: transform 0.3s ease-out;
+}
+
+.underline-animation:hover::after {
+  transform: scaleX(1);
+}
