@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useState } from "react";
 
 const CanvasDraw = forwardRef(function CanvasDraw(
   {
