@@ -2,6 +2,9 @@
 import { useEffect, useState, useRef } from "react";
 import { useWebSocket } from "../context/useWebSocketContext";
 
+
+const apiUrl = import.meta.env.VITE_API_URL;
+
 export default function useCollaboration(roomId, me) {
   const [users, setUsers] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -121,8 +124,8 @@ export default function useCollaboration(roomId, me) {
     const loadData = async () => {
       try {
         const [usersResponse, messagesResponse] = await Promise.all([
-          fetch(`http://localhost:8080/api/rooms/${roomId}/users`),
-          fetch(`http://localhost:8080/api/rooms/${roomId}/messages?limit=100`),
+          fetch(`${apiUrl}/api/rooms/${roomId}/users`),
+          fetch(`${apiUrl}/api/rooms/${roomId}/messages?limit=100`),
         ]);
 
         const usersData = usersResponse.ok ? await usersResponse.json() : [];

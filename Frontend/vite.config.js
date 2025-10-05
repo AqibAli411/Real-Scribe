@@ -3,6 +3,9 @@ import path from "path";
 import react from "@vitejs/plugin-react";
 
 import tailwindcss from "@tailwindcss/vite";
+
+const apiUrl = import.meta.env.VITE_API_URL;
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -20,7 +23,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/ws": {
-        target: "http://localhost:8080",
+        target: apiUrl,
         ws: true,
         changeOrigin: true,
       },
