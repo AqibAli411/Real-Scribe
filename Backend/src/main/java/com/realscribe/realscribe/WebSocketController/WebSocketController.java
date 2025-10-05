@@ -30,15 +30,11 @@ public class WebSocketController {
 
     public WebSocketController(SimpMessagingTemplate messaging, ObjectMapper objectMapper,
                                DrawingOperationRepository opRepo, TextOperationRepository textRepo
-//                               RoomRepository roomRepo,
-//                               PresenceService presenceService
     ) {
         this.messaging = messaging;
         this.objectMapper = objectMapper;
         this.opRepo = opRepo;
         this.textRepo = textRepo;
-//        this.roomRepo = roomRepo;
-//        this.presenceService = presenceService;
     }
 
     // Example: clients publish to /app/room/{roomId}/msg
@@ -117,7 +113,5 @@ public class WebSocketController {
 
     }
 
-    // Handle subscribe events (presence)
-    // Option A: override session connect/disconnect events with an ApplicationListener for
-    // SessionConnectEvent or SessionDisconnectEvent
+
 }

@@ -235,13 +235,14 @@ export default function Manager({
     };
   }, [isReady, roomId, subscribe, unsubscribe, onMessage]);
 
+  const apiUrl = import.meta.env.VITE_API_URL;
 
   // Set mounted flag and fetches inital data from backend
   useEffect(() => {
     isMounted.current = true;
 
     async function fetchStrokes() {
-      const response = await fetch("http://localhost:8080/api/draw");
+      const response = await fetch(`${apiUrl}/api/draw`);
       const result = await response.json();
 
       for (const fetchedObject of result) {
@@ -262,7 +263,7 @@ export default function Manager({
     return () => {
       isMounted.current = false;
     };
-  }, [scheduleRedraw, isDarkMode, addCompletedStroke, addToHistory]);
+  }, [scheduleRedraw, isDarkMode, addCompletedStroke, addToHistory, apiUrl]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

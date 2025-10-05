@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 @Controller
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = "https://real-scribe.vercel.app")
 public class EnhancedPresenceController {
 
     private final PresenceService presence;

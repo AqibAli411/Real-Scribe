@@ -12,7 +12,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/text")
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = "https://real-scribe.vercel.app")
 public class TextOperationController {
 
     private final TextOperationRepository repo;

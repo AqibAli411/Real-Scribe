@@ -14,7 +14,7 @@ import java.util.List;
 @RestController
 // /api/rooms
 @RequestMapping("/api/draw")
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = "https://real-scribe.vercel.app")
 public class DrawingOperationController {
     private final DrawingOperationRepository drawingOperationRepository;
 

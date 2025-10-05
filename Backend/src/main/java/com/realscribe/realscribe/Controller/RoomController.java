@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 // /api/rooms
 @RequestMapping("/api/room")
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = "https://real-scribe.vercel.app")
 public class RoomController {
     private final RoomRepository roomRepo;
 
