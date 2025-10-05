@@ -84,43 +84,43 @@ function usePublishDebounce(callback, delay) {
   );
 }
 
+const apiUrl = import.meta.env.VITE_API_URL;
+
 // Simplified toolbar - removed some heavy components
-const MainToolbarContent = React.memo(
-  ({ onHighlighterClick, onLinkClick, isMobile }) => (
-    <>
-      <Spacer />
-      <ToolbarGroup>
-        <UndoRedoButton action="undo" />
-        <UndoRedoButton action="redo" />
-      </ToolbarGroup>
-      <ToolbarSeparator />
-      <ToolbarGroup>
-        <HeadingDropdownMenu levels={[1, 2, 3, 4]} portal={isMobile} />
-        <ListDropdownMenu
-          types={["bulletList", "orderedList"]}
-          portal={isMobile}
-        />
-        <BlockquoteButton />
-      </ToolbarGroup>
-      <ToolbarSeparator />
-      <ToolbarGroup>
-        <MarkButton type="bold" />
-        <MarkButton type="italic" />
-        <MarkButton type="strike" />
-        <MarkButton type="code" />
-        {!isMobile && <ColorHighlightPopover />}
-        {!isMobile ? <LinkPopover /> : <LinkButton onClick={onLinkClick} />}
-      </ToolbarGroup>
-      <ToolbarSeparator />
-      <ToolbarGroup>
-        <TextAlignButton align="left" />
-        <TextAlignButton align="center" />
-        <TextAlignButton align="right" />
-      </ToolbarGroup>
-      <Spacer />
-    </>
-  ),
-);
+const MainToolbarContent = React.memo(({ onLinkClick, isMobile }) => (
+  <>
+    <Spacer />
+    <ToolbarGroup>
+      <UndoRedoButton action="undo" />
+      <UndoRedoButton action="redo" />
+    </ToolbarGroup>
+    <ToolbarSeparator />
+    <ToolbarGroup>
+      <HeadingDropdownMenu levels={[1, 2, 3, 4]} portal={isMobile} />
+      <ListDropdownMenu
+        types={["bulletList", "orderedList"]}
+        portal={isMobile}
+      />
+      <BlockquoteButton />
+    </ToolbarGroup>
+    <ToolbarSeparator />
+    <ToolbarGroup>
+      <MarkButton type="bold" />
+      <MarkButton type="italic" />
+      <MarkButton type="strike" />
+      <MarkButton type="code" />
+      {!isMobile && <ColorHighlightPopover />}
+      {!isMobile ? <LinkPopover /> : <LinkButton onClick={onLinkClick} />}
+    </ToolbarGroup>
+    <ToolbarSeparator />
+    <ToolbarGroup>
+      <TextAlignButton align="left" />
+      <TextAlignButton align="center" />
+      <TextAlignButton align="right" />
+    </ToolbarGroup>
+    <Spacer />
+  </>
+));
 
 const MobileToolbarContent = React.memo(({ type, onBack }) => (
   <>
@@ -206,14 +206,6 @@ function SimpleEditor({ roomId, userId, name }) {
     [userId],
   );
 
-  // WebSocket connection
-  // const { client, connected } = useWebSocket(
-  //   [{ topic: `/topic/write/room.${roomId}`, handler: onWrite }],
-  //   {
-  //     id: userId,
-  //     name,
-  //   },
-  // );
   React.useEffect(() => {
     if (!isReady) return;
 
@@ -244,15 +236,6 @@ function SimpleEditor({ roomId, userId, name }) {
         }
 
         try {
-          // client.publish({
-          //   destination: `/app/room/${roomId}/msg`,
-          //   body: JSON.stringify({
-          //     type: "text_update",
-          //     userId,
-          //     roomId,
-          //     payload: { content },
-          //   }),
-          // });
           publish(`/app/room/${roomId}/msg`, {
             type: "text_update",
             userId,
@@ -334,9 +317,7 @@ function SimpleEditor({ roomId, userId, name }) {
     isMountedRef.current = true;
     async function fetchText() {
       try {
-        const response = await fetch(
-          `http://localhost:8080/api/text/latest/${roomId}`,
-        );
+        const response = await fetch(`${apiUrl}/api/text/latest/${roomId}`);
         if (!response.ok) return;
 
         const data = await response.json();
