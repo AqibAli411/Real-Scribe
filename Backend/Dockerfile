@@ -1,22 +1,29 @@
-# Step 1: Use Maven with Java 24 to build the project
-FROM maven:3.9.6-eclipse-temurin-24 AS build
+# Step 1: Use Maven with Java 21 LTS to build the project
+FROM maven:3.9.6-eclipse-temurin-21 AS build
 
 # Set the working directory
 WORKDIR /app
 
-# Copy everything from backend
-COPY . .
+# Copy pom.xml first for better caching
+COPY pom.xml .
+
+# Copy source code
+COPY src ./src
 
 # Build the project (skipping tests)
 RUN mvn clean package -DskipTests
 
-# Step 2: Use lightweight JDK 24 to run the jar
-FROM eclipse-temurin:24-jdk-alpine
+# Step 2: Use lightweight JRE to run the jar
+FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
 # Copy the built jar from the previous stage
 COPY --from=build /app/target/*.jar app.jar
+
+# Create a non-root user for security
+RUN addgroup -S spring && adduser -S spring -G spring
+USER spring
 
 # Expose the Spring Boot port
 EXPOSE 8080
