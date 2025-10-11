@@ -1,32 +1,14 @@
-# Step 1: Use Maven with Java 17 LTS to build the project
-FROM maven:3.9.6-eclipse-temurin-17 AS build
-
-# Set the working directory
+# Step 1: Build with Java 24
+FROM maven:3.9.9-eclipse-temurin-24 AS build
 WORKDIR /app
-
-# Copy pom.xml first for better caching
 COPY pom.xml .
-
-# Copy source code
+RUN mvn dependency:go-offline
 COPY src ./src
-
-# Build the project (skipping tests)
 RUN mvn clean package -DskipTests
 
-# Step 2: Use lightweight JRE 17 to run the jar
-FROM eclipse-temurin:17-jre-alpine
-
+# Step 2: Run the jar
+FROM eclipse-temurin:24-jre
 WORKDIR /app
-
-# Copy the built jar from the previous stage
 COPY --from=build /app/target/*.jar app.jar
-
-# Create a non-root user for security
-RUN addgroup -S spring && adduser -S spring -G spring
-USER spring
-
-# Expose the Spring Boot port
 EXPOSE 8080
-
-# Command to run the app
 ENTRYPOINT ["java", "-jar", "app.jar"]
