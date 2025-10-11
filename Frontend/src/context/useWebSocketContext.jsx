@@ -11,8 +11,7 @@ import SockJS from "sockjs-client";
 
 // Create the WebSocket Context
 const WebSocketContext = createContext(null);
-const apiUrl = import.meta.env.VITE_API_URL;
-
+const apiUrl = import.meta.env.VITE_WS_URL;
 // WebSocket Provider Component (used in parent, e.g., App.js)
 export function WebSocketProvider({ children }) {
   const [connected, setConnected] = useState(false);
@@ -59,7 +58,7 @@ export function WebSocketProvider({ children }) {
     }
 
     const client = new Client({
-      webSocketFactory: () => new SockJS(`${apiUrl}/ws`),
+      webSocketFactory: () => new SockJS(`${apiUrl}`),
       reconnectDelay: 5000,
       heartbeatIncoming: 4000,
       heartbeatOutgoing: 4000,
