@@ -1,5 +1,5 @@
-# Step 1: Use Maven with Java 21 LTS to build the project
-FROM maven:3.9.6-eclipse-temurin-21 AS build
+# Step 1: Use Maven with Java 17 LTS to build the project
+FROM maven:3.9.6-eclipse-temurin-17 AS build
 
 # Set the working directory
 WORKDIR /app
@@ -13,8 +13,8 @@ COPY src ./src
 # Build the project (skipping tests)
 RUN mvn clean package -DskipTests
 
-# Step 2: Use lightweight JRE to run the jar
-FROM eclipse-temurin:21-jre-alpine
+# Step 2: Use lightweight JRE 17 to run the jar
+FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
