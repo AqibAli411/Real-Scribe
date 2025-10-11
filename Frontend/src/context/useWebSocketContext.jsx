@@ -72,6 +72,7 @@ export function WebSocketProvider({ children }) {
 
     client.onConnect = (frame) => {
       console.log("Connected to WebSocket:", frame);
+      console.log(import.meta.env)
       setConnected(true);
       // Re-subscribe to existing subscriptions
       subscriptionsRef.current.forEach((handler, topic) => {
