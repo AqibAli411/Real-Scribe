@@ -88,7 +88,7 @@ export default function RoomPage() {
 
   const apiUrl = import.meta.env.VITE_API_URL;
   const url = `${apiUrl}/api/room`;
-
+  console.log(apiUrl);
   const handleCreate = async () => {
     if (!validateName(name)) return;
 
