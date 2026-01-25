@@ -19,6 +19,7 @@ out/
 *.iml
 *.ipr
 *.iws
+*.md
 
 # === Java / Spring Boot ===
 HELP.md

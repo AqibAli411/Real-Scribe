@@ -6,6 +6,23 @@ body {
 
   .dark & {
     --tt-theme-text: var(--tt-gray-dark-900);
+    color: var(--tt-theme-text);
+  }
+}
+
+// Force toolbar buttons to be visible in dark mode
+.dark {
+  button {
+    color: var(--tt-gray-dark-900);
+
+    svg {
+      color: currentColor;
+    }
+  }
+
+  // Specific fix for disabled buttons
+  button:disabled {
+    color: var(--tt-gray-dark-500);
   }
 }
 
@@ -21,7 +38,7 @@ body {
 html,
 body,
 #root,
-#app {  
+#app {
   height: 100%;
   background-color: var(--tt-bg-color);
 }
