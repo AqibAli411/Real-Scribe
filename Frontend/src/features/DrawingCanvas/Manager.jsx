@@ -25,6 +25,7 @@ export default function Manager({
   const penWidth = useRef(2);
   const colorRef = useRef(isDarkMode ? "#000000" : "#ffffff");
   const currentToolRef = useRef("pen");
+  const pointBuffer = useRef([]); // Buffer for batching network updates
 
   const { isReady, subscribe, unsubscribe, publish } = useWebSocket();
 
@@ -118,23 +119,31 @@ export default function Manager({
               strokeId: incomingStrokeId,
             } = parsedMessage;
 
-            const { x, y, pressure, tool, width, color } = payload;
+            // Handle both single point (legacy) and batched points
+            const pointsToProcess = payload.points || (payload.x ? [[payload.x, payload.y, payload.pressure]] : []);
+
             //doesn't run for one actually drawing ( doesn't run locally)
             if (Number(userId) === Number(userWhoDraw)) return;
+
             //for identification of each stroke we define its id -> strokeId
             if (!liveStrokes.current.has(incomingStrokeId)) {
               liveStrokes.current.set(incomingStrokeId, {
                 points: [],
                 userId,
-                tool: tool || "pen",
-                width: width || 2, // Added width
-                color: color,
+                tool: payload.tool || "pen",
+                width: payload.width || 2,
+                color: payload.color,
                 lastUpdate: performance.now(),
               });
             }
 
             const strokeData = liveStrokes.current.get(incomingStrokeId);
-            strokeData.points.push([x, y, pressure]);
+
+            // Add all received points
+            pointsToProcess.forEach(point => {
+              strokeData.points.push(point);
+            });
+
             strokeData.lastUpdate = performance.now();
 
             scheduleRedraw();
@@ -456,26 +465,33 @@ export default function Manager({
 
         if (addPointToStroke(point)) scheduleRedraw();
 
-        // Throttled network update
+        // Batch points for network efficiency
+        if (!pointBuffer.current) pointBuffer.current = [];
+        pointBuffer.current.push([point[0], point[1], point[2]]);
+
         const now = performance.now();
 
-        if (now - lastEventTime.current >= 16) {
-          lastEventTime.current = now;
+        // Flush buffer every 30ms (approx 30fps network rate, but 60fps+ sampling)
+        if (now - lastEventTime.current >= 30) {
+          if (pointBuffer.current.length > 0) {
+            lastEventTime.current = now;
 
-          publish(`/app/room/${roomId}/msg`, {
-            type: "stroke_move",
-            roomId,
-            userId,
-            strokeId: currentStrokeId.current,
-            payload: {
-              x: point[0],
-              y: point[1],
-              pressure: point[2],
-              tool: currentToolRef.current,
-              width: penWidth.current,
-              color: colorRef.current,
-            },
-          });
+            publish(`/app/room/${roomId}/msg`, {
+              type: "stroke_move",
+              roomId,
+              userId,
+              strokeId: currentStrokeId.current,
+              payload: {
+                points: pointBuffer.current, // Send array of points
+                tool: currentToolRef.current,
+                width: penWidth.current,
+                color: colorRef.current,
+              },
+            });
+
+            // Clear buffer after sending
+            pointBuffer.current = [];
+          }
         }
       }
     },

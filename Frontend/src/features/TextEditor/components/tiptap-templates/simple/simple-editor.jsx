@@ -258,7 +258,7 @@ function SimpleEditor({ roomId, userId, name }) {
       },
       [connected, roomId, userId, publish],
     ),
-    50, // Longer debounce to reduce conflicts
+    200, // Longer debounce to reduce network calls
   );
 
   // Editor with minimal extensions for better performance
@@ -330,10 +330,10 @@ function SimpleEditor({ roomId, userId, name }) {
         console.error('Cannot fetch text: API URL or roomId is not configured', { apiUrl, roomId });
         return;
       }
-      
+
       const textUrl = `${apiUrl}/api/text/latest/${roomId}`;
       console.log('Fetching text from:', textUrl);
-      
+
       try {
         const response = await fetch(textUrl);
         if (!response.ok) return;
@@ -392,11 +392,11 @@ function SimpleEditor({ roomId, userId, name }) {
     () =>
       isMobile
         ? {
-            position: "fixed",
-            bottom: "20px",
-            left: "50%",
-            transform: "translateX(-50%)",
-          }
+          position: "fixed",
+          bottom: "20px",
+          left: "50%",
+          transform: "translateX(-50%)",
+        }
         : {},
     [isMobile],
   );
