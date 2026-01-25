@@ -11,6 +11,7 @@ body {
   width: 100%;
   height: 100%;
   font-family: "Montserrat";
+  @apply text-gray-900 bg-white dark:text-gray-100 dark:bg-neutral-900;
 }
 
 #root {
@@ -23,12 +24,10 @@ body {
     border: 2px solid transparent;
     background-image:
       linear-gradient(white, white),
-      linear-gradient(
-        to bottom right,
+      linear-gradient(to bottom right,
         theme("color.stone.300"),
         theme("color.stone.200"),
-        theme("color.stone.300")
-      );
+        theme("color.stone.300"));
     background-origin: border-box;
     background-clip: padding-box, border-box;
   }
@@ -41,12 +40,10 @@ body {
       radial-gradient(theme("color.zinc.200") 1.5px, transparent 0px),
       radial-gradient(theme("color.zinc.200") 1.5px, transparent 0px),
       linear-gradient(white, white),
-      linear-gradient(
-        to bottom right,
+      linear-gradient(to bottom right,
         theme("color.stone.300"),
         theme("color.stone.200"),
-        theme("color.stone.300")
-      );
+        theme("color.stone.300"));
 
     background-clip: padding-box, padding-box, padding-box, border-box;
     background-origin: border-box;

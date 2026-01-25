@@ -263,7 +263,7 @@ export function useCanvasRenderer(
     resetTransform(ctx);
 
     // Debug info (only in development)
-    ctx.fillStyle = "#666";
+    ctx.fillStyle = isDarkRef.current ? "#cccccc" : "#666666";
     ctx.font = "12px monospace";
     ctx.fillText(
       `Zoom: ${(transformRef.current.scale * 100).toFixed(0)}%`,

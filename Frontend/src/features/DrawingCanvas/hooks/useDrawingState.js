@@ -16,9 +16,9 @@ export function useDrawingState() {
 
   const startNewStroke = useCallback((point) => {
     isDrawing.current = true;
-    //a sort of variable that we can use to generate a random number each time
-    strokeId.current += 1; //starting with 1
-    currentStrokeId.current = strokeId.current;
+    // Generate a unique ID to prevent collisions between different users
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    currentStrokeId.current = uniqueId;
 
     myStroke.current = [point];
     lastPoint.current = point;

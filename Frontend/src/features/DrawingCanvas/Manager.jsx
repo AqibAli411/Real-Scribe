@@ -295,7 +295,7 @@ export default function Manager({
     return () => {
       isMounted.current = false;
     };
-  }, [scheduleRedraw, isDarkMode, addCompletedStroke, addToHistory]);
+  }, [scheduleRedraw, addCompletedStroke, addToHistory]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
