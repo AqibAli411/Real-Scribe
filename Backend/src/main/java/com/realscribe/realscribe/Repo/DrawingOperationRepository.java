@@ -7,12 +7,12 @@ import java.util.List;
 import java.util.UUID;
 
 
-public interface DrawingOperationRepository extends JpaRepository<DrawingOperation, Integer> {
+public interface DrawingOperationRepository extends JpaRepository<DrawingOperation, String> {
     @Transactional
-    void deleteById(int id);  // Keep as int
+    void deleteById(String id); 
 
     @Transactional
-    void deleteAllByIdIn(List<Integer> ids);  // For batch deletion
+    void deleteAllByIdIn(List<String> ids);  // For batch deletion
 
     List<DrawingOperation> findByRoomId(String roomId);
 

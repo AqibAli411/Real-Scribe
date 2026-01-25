@@ -23,7 +23,7 @@ export default function Manager({
   const isMounted = useRef(false);
   const isDownPressed = useRef(false);
   const penWidth = useRef(2);
-  const colorRef = useRef(isDarkMode ? "#000000" : "#ffffff");
+  const colorRef = useRef(isDarkMode ? "#ffffff" : "#000000");
   const currentToolRef = useRef("pen");
   const pointBuffer = useRef([]); // Buffer for batching network updates
 

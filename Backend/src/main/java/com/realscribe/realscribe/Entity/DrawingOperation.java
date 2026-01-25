@@ -13,9 +13,9 @@ import java.time.OffsetDateTime;
 @Table(name = "drawing_operations")
 public class DrawingOperation {
 
-    //this is definitely not user id -> STROKE_ID
+    //this is definitely not user id -> STROKE_ID (String UUID)
     @Id
-    private int id;
+    private String id;
 
     @Column(name = "room_id", columnDefinition = "text")
     private String roomId;

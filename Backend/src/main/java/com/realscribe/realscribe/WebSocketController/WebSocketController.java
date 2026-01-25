@@ -50,15 +50,28 @@ public class WebSocketController {
                 messaging.convertAndSend("/topic/room." + roomId, message);
                 break;
             case "stroke_end":
-                // persist to DB
-                DrawingOperation op = new DrawingOperation();
-                op.setRoomId(roomId);
-                op.setId(message.getStrokeId());
-                op.setOperationType("stroke");
-                op.setPayload(objectMapper.valueToTree(message.getPayload())); // Convert to JsonNode
-                opRepo.save(op);
-                // broadcast
-                messaging.convertAndSend("/topic/room." + roomId, message);
+                try {
+                    System.out.println("Processing stroke_end for room: " + roomId + ", strokeId: " + message.getStrokeId());
+                    // persist to DB
+                    DrawingOperation op = new DrawingOperation();
+                    op.setRoomId(roomId);
+                    op.setId(message.getStrokeId());
+                    op.setOperationType("stroke");
+                    op.setPayload(objectMapper.valueToTree(message.getPayload())); // Convert to JsonNode
+                    
+                    System.out.println("Saving operation to DB...");
+                    opRepo.save(op);
+                    System.out.println("Successfully saved operation: " + op.getId());
+                    
+                    // broadcast
+                    messaging.convertAndSend("/topic/room." + roomId, message);
+                } catch (Exception e) {
+                    System.err.println("FAILED to save stroke_end: " + e.getMessage());
+                    e.printStackTrace();
+                    // Still broadcast to keep clients in sync even if DB fails? 
+                    // Better to fail visibly? For now, let's try to broadcast anyway so users can draw
+                    messaging.convertAndSend("/topic/room." + roomId, message);
+                }
                 break;
             case "text_update":
                 //delete all previous records
@@ -77,17 +90,12 @@ public class WebSocketController {
                     Map<String, Object> payload = message.getPayload();
                     Object erasedStrokesObj = payload.get("erasedStrokes");
 
-                    // Safely convert to List<Integer>
-                    List<Integer> erasedStrokeIds = new ArrayList<>();
+                    // Safely convert to List<String>
+                    List<String> erasedStrokeIds = new ArrayList<>();
                     if (erasedStrokesObj instanceof List) {
                         for (Object id : (List<?>) erasedStrokesObj) {
-                            try {
-                                // Handle both String and Number input
-                                int strokeId = id instanceof Number ? ((Number) id).intValue()
-                                        : Integer.parseInt(id.toString());
-                                erasedStrokeIds.add(strokeId);
-                            } catch (NumberFormatException e) {
-                                System.out.println("Invalid stroke ID format: {} "+ id);
+                            if (id != null) {
+                                erasedStrokeIds.add(id.toString());
                             }
                         }
                     }
