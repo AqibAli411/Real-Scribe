@@ -26,6 +26,7 @@ export default function Manager({
   const colorRef = useRef(isDarkMode ? "#ffffff" : "#000000");
   const currentToolRef = useRef("pen");
   const pointBuffer = useRef([]); // Buffer for batching network updates
+  const completedStrokeIdsRef = useRef(new Set()); // Track completed stroke IDs to prevent race conditions
 
   const { isReady, subscribe, unsubscribe, publish } = useWebSocket();
 
@@ -125,11 +126,18 @@ export default function Manager({
             //doesn't run for one actually drawing ( doesn't run locally)
             if (Number(userId) === Number(userWhoDraw)) return;
 
+            // RACE CONDITION FIX: Ignore stroke_move for strokes that have already been completed
+            // This prevents late-arriving messages from recreating deleted stroke entries
+            if (completedStrokeIdsRef.current.has(incomingStrokeId)) {
+              console.log("Ignoring late stroke_move for completed stroke:", incomingStrokeId);
+              return;
+            }
+
             //for identification of each stroke we define its id -> strokeId
             if (!liveStrokes.current.has(incomingStrokeId)) {
               liveStrokes.current.set(incomingStrokeId, {
                 points: [],
-                userId,
+                userId: userWhoDraw,
                 tool: payload.tool || "pen",
                 width: payload.width || 2,
                 color: payload.color,
@@ -166,6 +174,15 @@ export default function Manager({
               color,
             } = payload;
 
+            // Mark this stroke as completed to prevent late stroke_move from recreating it
+            completedStrokeIdsRef.current.add(completedStrokeId);
+
+            // Clean up old completed IDs to prevent memory leak (keep last 100)
+            if (completedStrokeIdsRef.current.size > 100) {
+              const idsArray = Array.from(completedStrokeIdsRef.current);
+              completedStrokeIdsRef.current = new Set(idsArray.slice(-50));
+            }
+
             if (liveStrokes.current.has(completedStrokeId)) {
               liveStrokes.current.delete(completedStrokeId);
             }
@@ -179,7 +196,7 @@ export default function Manager({
                 points: currentStrokes,
                 tool: tool || "pen",
                 id: completedStrokeId,
-                userId: userId,
+                userId: userWhoDraw,
                 width: width || 2, // Added width
                 color: color || (isDarkMode ? "#ffffff" : "#000000"), // Added color
               };
