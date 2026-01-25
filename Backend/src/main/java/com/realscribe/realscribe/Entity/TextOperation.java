@@ -18,7 +18,7 @@ public class TextOperation {
     private String roomId;
 
     @Column(name = "user_id")
-    private int userId;
+    private String userId;
 
     @Column(columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)
