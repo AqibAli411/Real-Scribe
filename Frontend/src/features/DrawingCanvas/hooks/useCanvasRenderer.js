@@ -237,6 +237,7 @@ export function useCanvasRenderer(
             strokeData.points,
             strokeData.tool || "pen",
             strokeOptions,
+            true // isLive = true for remote strokes in progress
           );
         }
       }

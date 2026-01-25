@@ -12,7 +12,7 @@ export const ERASER_OPTIONS = {
 };
 
 // Optimized stroke rendering with tool support
-export function drawStrokePoints(ctx, points, tool = "pen", PEN_STROKES) {
+export function drawStrokePoints(ctx, points, tool = "pen", PEN_STROKES, isLive = false) {
   if (!points || points.length === 0) return;
 
   // Handle different tools
@@ -22,12 +22,12 @@ export function drawStrokePoints(ctx, points, tool = "pen", PEN_STROKES) {
       break;
     case "pen":
     default:
-      drawPenStroke(ctx, points, PEN_STROKES);
+      drawPenStroke(ctx, points, PEN_STROKES, isLive);
       break;
   }
 }
 
-function drawPenStroke(ctx, points, PEN_STROKES) {
+function drawPenStroke(ctx, points, PEN_STROKES, isLive = false) {
   if (points.length === 0) return;
 
   // For single points, draw a small circle
@@ -40,10 +40,23 @@ function drawPenStroke(ctx, points, PEN_STROKES) {
     return;
   }
 
-  // REMOVED: Simplified line rendering for short strokes to ensure consistency
-  // if (points.length < 4) { ... }
+  // For LIVE strokes (remote users drawing in real-time):
+  // Use a simpler, more stable rendering to avoid "wobble" effect
+  if (isLive && points.length < 50) {
+    ctx.beginPath();
+    ctx.lineWidth = PEN_STROKES.size;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.moveTo(points[0][0], points[0][1]);
 
-  // For longer strokes, use perfect-freehand
+    for (let i = 1; i < points.length; i++) {
+      ctx.lineTo(points[i][0], points[i][1]);
+    }
+    ctx.stroke();
+    return;
+  }
+
+  // For completed strokes or long live strokes, use perfect-freehand for beautiful curves
   const strokePoints = getStroke(points, PEN_STROKES);
 
   if (strokePoints.length < 3) return;
