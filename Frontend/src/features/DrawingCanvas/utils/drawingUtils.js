@@ -40,17 +40,8 @@ function drawPenStroke(ctx, points, PEN_STROKES) {
     return;
   }
 
-  // For very short strokes (2-3 points), use simple line rendering
-  if (points.length < 4) {
-    ctx.beginPath();
-    ctx.lineWidth = PEN_STROKES.size;
-    ctx.moveTo(points[0][0], points[0][1]);
-    for (let i = 1; i < points.length; i++) {
-      ctx.lineTo(points[i][0], points[i][1]);
-    }
-    ctx.stroke();
-    return;
-  }
+  // REMOVED: Simplified line rendering for short strokes to ensure consistency
+  // if (points.length < 4) { ... }
 
   // For longer strokes, use perfect-freehand
   const strokePoints = getStroke(points, PEN_STROKES);

@@ -260,6 +260,12 @@ export default function Manager({
       const drawUrl = `${apiUrl}/api/draw/${roomId}`;
       console.log('Fetching strokes from:', drawUrl);
       const response = await fetch(drawUrl);
+
+      if (!response.ok) {
+        console.warn(`Failed to fetch strokes (Status: ${response.status}). Backend might not be deployed or room is empty.`);
+        return;
+      }
+
       const result = await response.json();
 
       for (const fetchedObject of result) {
