@@ -21,24 +21,23 @@ const getWebSocketUrl = () => {
     return null;
   }
   
-  let baseUrl = wsUrl;
+  // Remove any trailing slashes and any existing /ws path
+  let cleanUrl = wsUrl.trim().replace(/\/+$/, '').replace(/\/ws\/?$/, '');
   
-  // If URL already includes protocol, use it as-is
-  if (wsUrl.startsWith('http://') || wsUrl.startsWith('https://')) {
-    baseUrl = wsUrl;
-  } else {
-    // If no protocol, determine based on current page protocol
-    // When on HTTPS (Vercel), we need HTTPS for the backend URL
-    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'https://' : 'http://';
-    baseUrl = `${protocol}${wsUrl}`;
-  }
+  // Remove any protocol if present (we'll add the correct one)
+  cleanUrl = cleanUrl.replace(/^https?:\/\//, '');
   
-  // Ensure HTTPS if page is loaded over HTTPS
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && baseUrl.startsWith('http://')) {
-    baseUrl = baseUrl.replace('http://', 'https://');
-  }
+  // Remove any ws:// or wss:// if somehow present
+  cleanUrl = cleanUrl.replace(/^wss?:\/\//, '');
   
-  return `${baseUrl}/ws`;
+  // Determine protocol based on current page
+  // When on HTTPS (Vercel), we need HTTPS for the backend URL
+  const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'https://' : 'http://';
+  
+  // Construct final URL: protocol + clean URL + /ws
+  const finalUrl = `${protocol}${cleanUrl}/ws`;
+  
+  return finalUrl;
 };
 
 // WebSocket Provider Component (used in parent, e.g., App.js)
@@ -105,7 +104,7 @@ export function WebSocketProvider({ children }) {
 
     // SockJS expects HTTP/HTTPS URLs and handles WebSocket protocol conversion internally
     // When the page is loaded over HTTPS, SockJS will automatically use secure WebSocket (WSS)
-    // But the URL itself must be HTTPS (not ws:// or wss://)
+    // The URL should already be HTTPS if we're on HTTPS (handled in getWebSocketUrl)
     const client = new Client({
       webSocketFactory: () => {
         // Final validation
@@ -113,15 +112,22 @@ export function WebSocketProvider({ children }) {
           throw new Error('Invalid WebSocket URL: ' + webSocketUrl);
         }
         
-        // Ensure we're using HTTPS if the page is loaded over HTTPS
-        // This prevents "insecure SockJS connection" errors
+        // Ensure URL is properly formatted (should already be correct from getWebSocketUrl)
+        // Just ensure it's HTTPS if we're on HTTPS page
         let finalUrl = webSocketUrl;
         if (window.location.protocol === 'https:' && finalUrl.startsWith('http://')) {
-          // Convert http:// to https:// for secure pages
           finalUrl = finalUrl.replace('http://', 'https://');
           console.log('Converted WebSocket URL to HTTPS:', finalUrl);
         }
         
+        // Validate URL format - should be https://domain.com/ws (not wss:// or ws://)
+        if (finalUrl.startsWith('ws://') || finalUrl.startsWith('wss://')) {
+          console.error('Invalid WebSocket URL format (should be http:// or https://, not ws:// or wss://):', finalUrl);
+          // Try to fix it
+          finalUrl = finalUrl.replace(/^wss?:\/\//, 'https://');
+        }
+        
+        console.log('Creating SockJS connection to:', finalUrl);
         return new SockJS(finalUrl);
       },
       reconnectDelay: 5000,
