@@ -403,6 +403,10 @@ export default function Manager({
           });
         }
       } else {
+        // CRITICAL FIX: Clear point buffer when starting a new stroke
+        // This prevents old points from the previous stroke from being sent with the new stroke
+        pointBuffer.current = [];
+
         const newStrokeId = startNewStroke(point);
         scheduleRedraw();
 
@@ -576,6 +580,9 @@ export default function Manager({
           color: colorRef.current,
         },
       });
+
+      // Clear point buffer after stroke ends to prevent carryover
+      pointBuffer.current = [];
     }
 
     scheduleRedraw();
