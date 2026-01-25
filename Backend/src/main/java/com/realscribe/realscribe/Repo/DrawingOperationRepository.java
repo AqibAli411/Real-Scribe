@@ -15,4 +15,7 @@ public interface DrawingOperationRepository extends JpaRepository<DrawingOperati
     void deleteAllByIdIn(List<Integer> ids);  // For batch deletion
 
     List<DrawingOperation> findByRoomId(String roomId);
+
+    @Transactional
+    void deleteAllByRoomId(String roomId);
 }

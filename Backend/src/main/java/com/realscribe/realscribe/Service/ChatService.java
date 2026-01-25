@@ -106,6 +106,15 @@ public class ChatService {
         return roomMessages.getOrDefault(roomId, new ArrayList<>()).size();
     }
 
+    // Method to clear all messages for a room (when room is deleted)
+    public synchronized void clearRoomMessages(String roomId) {
+        if (roomMessages.containsKey(roomId)) {
+            roomMessages.remove(roomId);
+            messageCounters.remove(roomId);
+            System.out.println("Cleared all messages for room: " + roomId);
+        }
+    }
+
     // Method to clear old messages (useful for memory management)
     public synchronized void clearOldMessages(String roomId, int keepLastN) {
         List<ChatMessage> messages = roomMessages.get(roomId);

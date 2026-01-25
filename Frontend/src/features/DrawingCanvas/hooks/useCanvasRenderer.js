@@ -162,12 +162,12 @@ export function useCanvasRenderer(
     // Apply transformation for drawing
     applyTransform(ctx);
 
-    // FIXED: Use the current pen width instead of hardcoded value
+    // Tuned for network stability
     const PEN_STROKES = {
-      size: penWidth.current, // This was the main issue - was hardcoded to 2.5
-      thinning: -0.3,
-      smoothing: 0.35,
-      streamline: 0.15,
+      size: penWidth.current,
+      thinning: -0.1, // Reduced thinning to prevent "broken" look on fast/jittery strokes
+      smoothing: 0.6, // Increased smoothing for cleaner curves
+      streamline: 0.4, // Increased streamline to stabilize remote input
       easing: (t) => t,
       start: { taper: 0, easing: (t) => t },
       end: { taper: 0, easing: (t) => t },

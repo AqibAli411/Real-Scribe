@@ -63,6 +63,7 @@ body,
 
 .tiptap.ProseMirror {
   font-family: "DM Sans", sans-serif;
+  color: var(--tt-theme-text); // Force text color inheritance
 }
 
 .simple-editor-wrapper {

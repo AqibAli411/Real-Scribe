@@ -4,6 +4,9 @@ import com.realscribe.realscribe.DTO.PresenceEvent;
 import com.realscribe.realscribe.DTO.UserPresence;
 import com.realscribe.realscribe.DTO.ChatMessage;
 import com.realscribe.realscribe.DTO.ChatEvent;
+import com.realscribe.realscribe.Repo.DrawingOperationRepository;
+import com.realscribe.realscribe.Repo.RoomRepository;
+import com.realscribe.realscribe.Repo.TextOperationRepository;
 import com.realscribe.realscribe.Service.PresenceService;
 import com.realscribe.realscribe.Service.ChatService;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
@@ -24,11 +27,23 @@ public class EnhancedPresenceController {
     private final PresenceService presence;
     private final ChatService chatService;
     private final SimpMessagingTemplate broker;
+    private final RoomRepository roomRepository;
+    private final DrawingOperationRepository drawingOperationRepository;
+    private final TextOperationRepository textOperationRepository;
 
-    public EnhancedPresenceController(PresenceService presence, ChatService chatService, SimpMessagingTemplate broker) {
+    public EnhancedPresenceController(
+            PresenceService presence,
+            ChatService chatService,
+            SimpMessagingTemplate broker,
+            RoomRepository roomRepository,
+            DrawingOperationRepository drawingOperationRepository,
+            TextOperationRepository textOperationRepository) {
         this.presence = presence;
         this.chatService = chatService;
         this.broker = broker;
+        this.roomRepository = roomRepository;
+        this.drawingOperationRepository = drawingOperationRepository;
+        this.textOperationRepository = textOperationRepository;
     }
 
     @MessageMapping("/room/{roomId}/presence.join")
@@ -119,6 +134,24 @@ public class EnhancedPresenceController {
                     broker.convertAndSend("/topic/room." + roomId + ".presence",
                             new PresenceEvent("presence_leave", roomId,
                                     new UserPresence(binding.userId(), binding.name()), users));
+                    
+                    // Check if room is empty
+                    if (users.isEmpty()) {
+                        System.out.println("Room " + roomId + " is empty. Initiating clean up...");
+                        try {
+                            // Delete all data associated with the room
+                            drawingOperationRepository.deleteAllByRoomId(roomId);
+                            textOperationRepository.deleteAllByRoomId(roomId);
+                            chatService.clearRoomMessages(roomId);
+                            roomRepository.deleteById(roomId);
+                            
+                            System.out.println("Room " + roomId + " and all associated data deleted.");
+                        } catch (Exception cleanupError) {
+                            System.err.println("Error cleaning up room " + roomId + ": " + cleanupError.getMessage());
+                            cleanupError.printStackTrace();
+                        }
+                    }
+                    
                 } catch (Exception e) {
                     System.err.println("Error broadcasting presence leave: " + e.getMessage());
                 }
