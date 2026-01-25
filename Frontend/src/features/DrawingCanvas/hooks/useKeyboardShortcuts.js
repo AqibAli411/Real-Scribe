@@ -32,9 +32,10 @@ export function useKeyboardShortcuts({
         //we will publish here -> subscribe method -> call undo method
         if (!isReady) return;
 
-        publish("/app/undo", {
-          canUndo,
-        });
+        // Undo is handled locally via useUndoRedo hook
+        // publish("/app/undo", { canUndo }); 
+        
+        return;
 
         return;
       }

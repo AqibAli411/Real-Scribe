@@ -8,13 +8,14 @@ import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PathVariable;
 
 import java.util.List;
 
 @RestController
 // /api/rooms
 @RequestMapping("/api/draw")
-@CrossOrigin(origins = "https://real-scribe.vercel.app")
+@CrossOrigin(origins = {"https://real-scribe.vercel.app", "http://localhost:5173"})
 public class DrawingOperationController {
     private final DrawingOperationRepository drawingOperationRepository;
 
@@ -22,10 +23,10 @@ public class DrawingOperationController {
         this.drawingOperationRepository = drawingOperationRepository;
     }
 
-    @GetMapping
+    @GetMapping("/{roomId}")
     @Transactional(readOnly = true)
-    public List<DrawingOperation> getDrawingOperations() {
-        return drawingOperationRepository.findAll();
+    public List<DrawingOperation> getDrawingOperationsByRoom(@PathVariable String roomId) {
+        return drawingOperationRepository.findByRoomId(roomId);
     }
 
 

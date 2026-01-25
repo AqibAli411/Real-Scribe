@@ -256,8 +256,8 @@ export default function Manager({
         console.error('Cannot fetch strokes: API URL is not configured');
         return;
       }
-      
-      const drawUrl = `${apiUrl}/api/draw`;
+
+      const drawUrl = `${apiUrl}/api/draw/${roomId}`;
       console.log('Fetching strokes from:', drawUrl);
       const response = await fetch(drawUrl);
       const result = await response.json();
@@ -434,7 +434,7 @@ export default function Manager({
 
         // Send to network only if strokes were actually erased
         if (erasedStrokes.length > 0) {
-     
+
           publish(`/app/room/${roomId}/msg`, {
             type: "clear",
             roomId,
@@ -455,7 +455,7 @@ export default function Manager({
 
         if (now - lastEventTime.current >= 16) {
           lastEventTime.current = now;
-        
+
           publish(`/app/room/${roomId}/msg`, {
             type: "stroke_move",
             roomId,
