@@ -213,11 +213,14 @@ export function useCanvasRenderer(
     }
 
     /* eslint-disable no-unused-vars */
-    for (const [_, strokeData] of liveStrokes.current) {
+    // Reset canvas path state before drawing live strokes
+    ctx.beginPath();
+
+    for (const [strokeId, strokeData] of liveStrokes.current) {
       if (strokeData && strokeData.points && strokeData.points.length > 0) {
         const tempStroke = { points: strokeData.points };
         if (isStrokeVisible(tempStroke)) {
-          // Set stroke-specific color for live strokes " || colorRef.current "
+          // Set stroke-specific color for live strokes
           let strokeColor = strokeData.color;
 
           if (strokeColor === "#000000" && isDarkRef.current)
@@ -232,6 +235,8 @@ export function useCanvasRenderer(
             ...PEN_STROKES,
             size: strokeData.width || PEN_STROKES.size,
           };
+
+          // Each live stroke is rendered in isolation
           drawStrokePoints(
             ctx,
             strokeData.points,

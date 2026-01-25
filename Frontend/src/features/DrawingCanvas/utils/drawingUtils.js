@@ -28,38 +28,57 @@ export function drawStrokePoints(ctx, points, tool = "pen", PEN_STROKES, isLive 
 }
 
 function drawPenStroke(ctx, points, PEN_STROKES, isLive = false) {
-  if (points.length === 0) return;
+  if (!points || points.length === 0) return;
+
+  // Save canvas state to ensure complete isolation
+  ctx.save();
 
   // For single points, draw a small circle
   if (points.length === 1) {
     const [x, y, pressure = 0.5] = points[0];
-    const radius = (PEN_STROKES.size * pressure) / 2;
+    const radius = Math.max((PEN_STROKES.size * pressure) / 2, 1);
     ctx.beginPath();
-    ctx.arc(x, y, Math.max(radius, 1), 0, Math.PI * 2);
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
     return;
   }
 
   // For LIVE strokes (remote users drawing in real-time):
-  // Use a simpler, more stable rendering to avoid "wobble" effect
-  if (isLive && points.length < 50) {
+  // Use simple line rendering for ALL live strokes to ensure stability
+  if (isLive) {
     ctx.beginPath();
-    ctx.lineWidth = PEN_STROKES.size;
+    ctx.lineWidth = PEN_STROKES.size || 2;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.moveTo(points[0][0], points[0][1]);
 
+    // Explicitly move to first point
+    const firstPoint = points[0];
+    if (!firstPoint || firstPoint.length < 2) {
+      ctx.restore();
+      return;
+    }
+    ctx.moveTo(firstPoint[0], firstPoint[1]);
+
+    // Draw lines to each subsequent point
     for (let i = 1; i < points.length; i++) {
-      ctx.lineTo(points[i][0], points[i][1]);
+      const point = points[i];
+      if (point && point.length >= 2) {
+        ctx.lineTo(point[0], point[1]);
+      }
     }
     ctx.stroke();
+    ctx.restore();
     return;
   }
 
-  // For completed strokes or long live strokes, use perfect-freehand for beautiful curves
+  // For completed strokes, use perfect-freehand for beautiful curves
   const strokePoints = getStroke(points, PEN_STROKES);
 
-  if (strokePoints.length < 3) return;
+  if (!strokePoints || strokePoints.length < 3) {
+    ctx.restore();
+    return;
+  }
 
   ctx.beginPath();
   ctx.moveTo(strokePoints[0][0], strokePoints[0][1]);
@@ -78,6 +97,8 @@ function drawPenStroke(ctx, points, PEN_STROKES, isLive = false) {
   ctx.lineTo(lastPoint[0], lastPoint[1]);
   ctx.closePath();
   ctx.fill();
+
+  ctx.restore();
 }
 
 function drawEraserStroke(ctx, points) {
