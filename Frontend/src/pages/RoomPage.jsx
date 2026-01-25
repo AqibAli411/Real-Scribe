@@ -87,11 +87,19 @@ export default function RoomPage() {
   }
 
   const apiUrl = import.meta.env.VITE_API_URL;
-  const url = `${apiUrl}/api/room`;
-  console.log(apiUrl);
+  
   const handleCreate = async () => {
     if (!validateName(name)) return;
 
+    if (!apiUrl) {
+      console.error('Cannot create room: API URL is not configured. Please set VITE_API_URL environment variable.');
+      alert('Configuration error: API URL is not set. Please contact support.');
+      return;
+    }
+
+    const url = `${apiUrl}/api/room`;
+    console.log('API URL:', apiUrl);
+    
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -118,6 +126,14 @@ export default function RoomPage() {
   const handleJoin = async () => {
     if (!validateName(name) || !validateRoomId(joinRoomId)) return;
 
+    if (!apiUrl) {
+      console.error('Cannot join room: API URL is not configured. Please set VITE_API_URL environment variable.');
+      alert('Configuration error: API URL is not set. Please contact support.');
+      return;
+    }
+
+    const url = `${apiUrl}/api/room`;
+    
     try {
       const response = await fetch(`${url}/${joinRoomId}`);
       if (!response.ok) throw new Error("Room cannot be found!");

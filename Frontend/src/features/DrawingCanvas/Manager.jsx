@@ -242,6 +242,11 @@ export default function Manager({
     isMounted.current = true;
 
     async function fetchStrokes() {
+      if (!apiUrl) {
+        console.error('Cannot fetch strokes: API URL is not configured');
+        return;
+      }
+      
       const response = await fetch(`${apiUrl}/api/draw`);
       const result = await response.json();
 

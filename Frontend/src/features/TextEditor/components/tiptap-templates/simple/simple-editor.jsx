@@ -316,6 +316,11 @@ function SimpleEditor({ roomId, userId, name }) {
   React.useEffect(() => {
     isMountedRef.current = true;
     async function fetchText() {
+      if (!apiUrl) {
+        console.error('Cannot fetch text: API URL is not configured');
+        return;
+      }
+      
       try {
         const response = await fetch(`${apiUrl}/api/text/latest/${roomId}`);
         if (!response.ok) return;

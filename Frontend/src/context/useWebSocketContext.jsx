@@ -11,7 +11,26 @@ import SockJS from "sockjs-client";
 
 // Create the WebSocket Context
 const WebSocketContext = createContext(null);
-const apiUrl = import.meta.env.VITE_WS_URL;
+// Get WebSocket URL - use VITE_WS_URL if set, otherwise fallback to VITE_API_URL
+const wsUrl = import.meta.env.VITE_WS_URL || import.meta.env.VITE_API_URL;
+// Construct the full WebSocket URL with /ws endpoint
+// SockJS expects HTTP/HTTPS URLs, not ws/wss URLs - it handles protocol conversion internally
+const getWebSocketUrl = () => {
+  if (!wsUrl) return undefined;
+  
+  // If URL already includes protocol, use it as-is and append /ws
+  if (wsUrl.startsWith('http://') || wsUrl.startsWith('https://')) {
+    return `${wsUrl}/ws`;
+  }
+  
+  // If no protocol, determine based on current page protocol
+  // When on HTTPS (Vercel), we need HTTPS for the backend URL
+  const protocol = window.location.protocol === 'https:' ? 'https://' : 'http://';
+  return `${protocol}${wsUrl}/ws`;
+};
+
+const webSocketUrl = getWebSocketUrl();
+
 // WebSocket Provider Component (used in parent, e.g., App.js)
 export function WebSocketProvider({ children }) {
   const [connected, setConnected] = useState(false);
@@ -57,8 +76,29 @@ export function WebSocketProvider({ children }) {
       return;
     }
 
+    // Check if WebSocket URL is configured
+    if (!webSocketUrl) {
+      console.error("WebSocket URL is not configured. Please set VITE_WS_URL or VITE_API_URL environment variable.");
+      return;
+    }
+
+    // SockJS expects HTTP/HTTPS URLs and handles WebSocket protocol conversion internally
+    // When the page is loaded over HTTPS, SockJS will automatically use secure WebSocket (WSS)
+    // But the URL itself must be HTTPS (not ws:// or wss://)
     const client = new Client({
-      webSocketFactory: () => new SockJS(`${apiUrl}`),
+      webSocketFactory: () => {
+        if (!webSocketUrl) {
+          throw new Error('WebSocket URL is not configured');
+        }
+        // Ensure we're using HTTPS if the page is loaded over HTTPS
+        // This prevents "insecure SockJS connection" errors
+        let finalUrl = webSocketUrl;
+        if (window.location.protocol === 'https:' && finalUrl.startsWith('http://')) {
+          // Convert http:// to https:// for secure pages
+          finalUrl = finalUrl.replace('http://', 'https://');
+        }
+        return new SockJS(finalUrl);
+      },
       reconnectDelay: 5000,
       heartbeatIncoming: 4000,
       heartbeatOutgoing: 4000,

@@ -3,7 +3,17 @@ import { useEffect, useState, useRef } from "react";
 import { useWebSocket } from "../context/useWebSocketContext";
 
 
-const apiUrl = import.meta.env.VITE_API_URL;
+// Get API URL with validation
+const getApiUrl = () => {
+  const url = import.meta.env.VITE_API_URL;
+  if (!url) {
+    console.error('VITE_API_URL is not set. Please configure it in your environment variables.');
+    return null;
+  }
+  return url;
+};
+
+const apiUrl = getApiUrl();
 
 export default function useCollaboration(roomId, me) {
   const [users, setUsers] = useState([]);
@@ -122,6 +132,12 @@ export default function useCollaboration(roomId, me) {
     messageIdsRef.current.clear();
 
     const loadData = async () => {
+      if (!apiUrl) {
+        console.error('Cannot load collaboration data: API URL is not configured');
+        setIsLoading(false);
+        return;
+      }
+      
       try {
         const [usersResponse, messagesResponse] = await Promise.all([
           fetch(`${apiUrl}/api/rooms/${roomId}/users`),
