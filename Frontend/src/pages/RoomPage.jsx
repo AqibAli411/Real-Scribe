@@ -86,19 +86,30 @@ export default function RoomPage() {
     return Math.round(Math.random() * 1000 + 1);
   }
 
-  const apiUrl = import.meta.env.VITE_API_URL;
+  const getApiUrl = () => {
+    const url = import.meta.env.VITE_API_URL;
+    if (!url || url === 'undefined' || url.includes('localhost')) {
+      return null;
+    }
+    // Ensure HTTPS if we're on HTTPS
+    if (window.location.protocol === 'https:' && url.startsWith('http://')) {
+      return url.replace('http://', 'https://');
+    }
+    return url;
+  };
   
   const handleCreate = async () => {
     if (!validateName(name)) return;
 
+    const apiUrl = getApiUrl();
     if (!apiUrl) {
-      console.error('Cannot create room: API URL is not configured. Please set VITE_API_URL environment variable.');
-      alert('Configuration error: API URL is not set. Please contact support.');
+      console.error('Cannot create room: API URL is not configured. Please set VITE_API_URL environment variable in Vercel.');
+      alert('Configuration error: API URL is not set. Please set VITE_API_URL in Vercel environment variables.');
       return;
     }
 
     const url = `${apiUrl}/api/room`;
-    console.log('API URL:', apiUrl);
+    console.log('Creating room with API URL:', url);
     
     try {
       const response = await fetch(url, {
@@ -126,13 +137,15 @@ export default function RoomPage() {
   const handleJoin = async () => {
     if (!validateName(name) || !validateRoomId(joinRoomId)) return;
 
+    const apiUrl = getApiUrl();
     if (!apiUrl) {
-      console.error('Cannot join room: API URL is not configured. Please set VITE_API_URL environment variable.');
-      alert('Configuration error: API URL is not set. Please contact support.');
+      console.error('Cannot join room: API URL is not configured. Please set VITE_API_URL environment variable in Vercel.');
+      alert('Configuration error: API URL is not set. Please set VITE_API_URL in Vercel environment variables.');
       return;
     }
 
     const url = `${apiUrl}/api/room`;
+    console.log('Joining room with API URL:', url);
     
     try {
       const response = await fetch(`${url}/${joinRoomId}`);

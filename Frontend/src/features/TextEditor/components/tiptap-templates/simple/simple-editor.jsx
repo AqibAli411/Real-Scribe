@@ -84,7 +84,16 @@ function usePublishDebounce(callback, delay) {
   );
 }
 
-const apiUrl = import.meta.env.VITE_API_URL;
+const getApiUrl = () => {
+  const url = import.meta.env.VITE_API_URL;
+  if (!url || url === 'undefined' || url.includes('localhost')) {
+    return null;
+  }
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('http://')) {
+    return url.replace('http://', 'https://');
+  }
+  return url;
+};
 
 // Simplified toolbar - removed some heavy components
 const MainToolbarContent = React.memo(({ onLinkClick, isMobile }) => (
@@ -316,13 +325,17 @@ function SimpleEditor({ roomId, userId, name }) {
   React.useEffect(() => {
     isMountedRef.current = true;
     async function fetchText() {
-      if (!apiUrl) {
-        console.error('Cannot fetch text: API URL is not configured');
+      const apiUrl = getApiUrl();
+      if (!apiUrl || !roomId) {
+        console.error('Cannot fetch text: API URL or roomId is not configured', { apiUrl, roomId });
         return;
       }
       
+      const textUrl = `${apiUrl}/api/text/latest/${roomId}`;
+      console.log('Fetching text from:', textUrl);
+      
       try {
-        const response = await fetch(`${apiUrl}/api/text/latest/${roomId}`);
+        const response = await fetch(textUrl);
         if (!response.ok) return;
 
         const data = await response.json();

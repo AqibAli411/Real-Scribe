@@ -12,24 +12,34 @@ import SockJS from "sockjs-client";
 // Create the WebSocket Context
 const WebSocketContext = createContext(null);
 // Get WebSocket URL - use VITE_WS_URL if set, otherwise fallback to VITE_API_URL
-const wsUrl = import.meta.env.VITE_WS_URL || import.meta.env.VITE_API_URL;
-// Construct the full WebSocket URL with /ws endpoint
-// SockJS expects HTTP/HTTPS URLs, not ws/wss URLs - it handles protocol conversion internally
+// Must be called at runtime to access window object
 const getWebSocketUrl = () => {
-  if (!wsUrl) return undefined;
+  const wsUrl = import.meta.env.VITE_WS_URL || import.meta.env.VITE_API_URL;
   
-  // If URL already includes protocol, use it as-is and append /ws
-  if (wsUrl.startsWith('http://') || wsUrl.startsWith('https://')) {
-    return `${wsUrl}/ws`;
+  if (!wsUrl || wsUrl === 'undefined' || wsUrl.includes('localhost')) {
+    console.error('WebSocket URL is not configured. Current value:', wsUrl);
+    return null;
   }
   
-  // If no protocol, determine based on current page protocol
-  // When on HTTPS (Vercel), we need HTTPS for the backend URL
-  const protocol = window.location.protocol === 'https:' ? 'https://' : 'http://';
-  return `${protocol}${wsUrl}/ws`;
+  let baseUrl = wsUrl;
+  
+  // If URL already includes protocol, use it as-is
+  if (wsUrl.startsWith('http://') || wsUrl.startsWith('https://')) {
+    baseUrl = wsUrl;
+  } else {
+    // If no protocol, determine based on current page protocol
+    // When on HTTPS (Vercel), we need HTTPS for the backend URL
+    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'https://' : 'http://';
+    baseUrl = `${protocol}${wsUrl}`;
+  }
+  
+  // Ensure HTTPS if page is loaded over HTTPS
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && baseUrl.startsWith('http://')) {
+    baseUrl = baseUrl.replace('http://', 'https://');
+  }
+  
+  return `${baseUrl}/ws`;
 };
-
-const webSocketUrl = getWebSocketUrl();
 
 // WebSocket Provider Component (used in parent, e.g., App.js)
 export function WebSocketProvider({ children }) {
@@ -76,27 +86,42 @@ export function WebSocketProvider({ children }) {
       return;
     }
 
+    // Get WebSocket URL at runtime
+    const webSocketUrl = getWebSocketUrl();
+    
     // Check if WebSocket URL is configured
     if (!webSocketUrl) {
-      console.error("WebSocket URL is not configured. Please set VITE_WS_URL or VITE_API_URL environment variable.");
+      console.error("WebSocket URL is not configured. Please set VITE_WS_URL or VITE_API_URL environment variable in Vercel.");
       return;
     }
+    
+    // Validate URL doesn't contain localhost
+    if (webSocketUrl.includes('localhost') || webSocketUrl.includes('127.0.0.1')) {
+      console.error("Invalid WebSocket URL (contains localhost):", webSocketUrl);
+      return;
+    }
+    
+    console.log('Connecting to WebSocket:', webSocketUrl);
 
     // SockJS expects HTTP/HTTPS URLs and handles WebSocket protocol conversion internally
     // When the page is loaded over HTTPS, SockJS will automatically use secure WebSocket (WSS)
     // But the URL itself must be HTTPS (not ws:// or wss://)
     const client = new Client({
       webSocketFactory: () => {
-        if (!webSocketUrl) {
-          throw new Error('WebSocket URL is not configured');
+        // Final validation
+        if (!webSocketUrl || webSocketUrl.includes('localhost')) {
+          throw new Error('Invalid WebSocket URL: ' + webSocketUrl);
         }
+        
         // Ensure we're using HTTPS if the page is loaded over HTTPS
         // This prevents "insecure SockJS connection" errors
         let finalUrl = webSocketUrl;
         if (window.location.protocol === 'https:' && finalUrl.startsWith('http://')) {
           // Convert http:// to https:// for secure pages
           finalUrl = finalUrl.replace('http://', 'https://');
+          console.log('Converted WebSocket URL to HTTPS:', finalUrl);
         }
+        
         return new SockJS(finalUrl);
       },
       reconnectDelay: 5000,

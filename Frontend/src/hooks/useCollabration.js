@@ -3,17 +3,21 @@ import { useEffect, useState, useRef } from "react";
 import { useWebSocket } from "../context/useWebSocketContext";
 
 
-// Get API URL with validation
+// Get API URL with validation - must be called at runtime, not module level
 const getApiUrl = () => {
   const url = import.meta.env.VITE_API_URL;
-  if (!url) {
-    console.error('VITE_API_URL is not set. Please configure it in your environment variables.');
+  if (!url || url === 'undefined' || url.includes('localhost')) {
+    console.error('VITE_API_URL is not set or is invalid. Current value:', url);
+    console.error('Please set VITE_API_URL in Vercel environment variables to your Render backend URL (e.g., https://your-backend.onrender.com)');
     return null;
+  }
+  // Ensure URL uses HTTPS if we're on HTTPS
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('http://')) {
+    console.warn('Converting HTTP to HTTPS for API URL');
+    return url.replace('http://', 'https://');
   }
   return url;
 };
-
-const apiUrl = getApiUrl();
 
 export default function useCollaboration(roomId, me) {
   const [users, setUsers] = useState([]);
@@ -132,16 +136,30 @@ export default function useCollaboration(roomId, me) {
     messageIdsRef.current.clear();
 
     const loadData = async () => {
-      if (!apiUrl) {
-        console.error('Cannot load collaboration data: API URL is not configured');
+      const apiUrl = getApiUrl();
+      
+      if (!apiUrl || !roomId) {
+        console.error('Cannot load collaboration data: API URL or roomId is not configured', { apiUrl, roomId });
         setIsLoading(false);
         return;
       }
       
+      // Validate URL format
+      if (apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1') || !apiUrl.startsWith('http')) {
+        console.error('Invalid API URL detected:', apiUrl);
+        setIsLoading(false);
+        return;
+      }
+      
+      const usersUrl = `${apiUrl}/api/rooms/${roomId}/users`;
+      const messagesUrl = `${apiUrl}/api/rooms/${roomId}/messages?limit=100`;
+      
+      console.log('Fetching collaboration data from:', { usersUrl, messagesUrl });
+      
       try {
         const [usersResponse, messagesResponse] = await Promise.all([
-          fetch(`${apiUrl}/api/rooms/${roomId}/users`),
-          fetch(`${apiUrl}/api/rooms/${roomId}/messages?limit=100`),
+          fetch(usersUrl),
+          fetch(messagesUrl),
         ]);
 
         const usersData = usersResponse.ok ? await usersResponse.json() : [];

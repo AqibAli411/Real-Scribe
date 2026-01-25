@@ -235,19 +235,31 @@ export default function Manager({
     };
   }, [isReady, roomId, subscribe, unsubscribe, onMessage]);
 
-  const apiUrl = import.meta.env.VITE_API_URL;
+  const getApiUrl = () => {
+    const url = import.meta.env.VITE_API_URL;
+    if (!url || url === 'undefined' || url.includes('localhost')) {
+      return null;
+    }
+    if (window.location.protocol === 'https:' && url.startsWith('http://')) {
+      return url.replace('http://', 'https://');
+    }
+    return url;
+  };
 
   // Set mounted flag and fetches inital data from backend
   useEffect(() => {
     isMounted.current = true;
 
     async function fetchStrokes() {
+      const apiUrl = getApiUrl();
       if (!apiUrl) {
         console.error('Cannot fetch strokes: API URL is not configured');
         return;
       }
       
-      const response = await fetch(`${apiUrl}/api/draw`);
+      const drawUrl = `${apiUrl}/api/draw`;
+      console.log('Fetching strokes from:', drawUrl);
+      const response = await fetch(drawUrl);
       const result = await response.json();
 
       for (const fetchedObject of result) {
@@ -268,7 +280,7 @@ export default function Manager({
     return () => {
       isMounted.current = false;
     };
-  }, [scheduleRedraw, isDarkMode, addCompletedStroke, addToHistory, apiUrl]);
+  }, [scheduleRedraw, isDarkMode, addCompletedStroke, addToHistory]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
