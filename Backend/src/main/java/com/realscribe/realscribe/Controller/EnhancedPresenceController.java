@@ -9,20 +9,21 @@ import com.realscribe.realscribe.Repo.RoomRepository;
 import com.realscribe.realscribe.Repo.TextOperationRepository;
 import com.realscribe.realscribe.Service.PresenceService;
 import com.realscribe.realscribe.Service.ChatService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.CrossOrigin;
 
 import java.util.List;
 import java.util.Map;
 
 @Controller
-@CrossOrigin(origins = "https://real-scribe.vercel.app")
 public class EnhancedPresenceController {
+    private static final Logger logger = LoggerFactory.getLogger(EnhancedPresenceController.class);
 
     private final PresenceService presence;
     private final ChatService chatService;
@@ -66,7 +67,7 @@ public class EnhancedPresenceController {
             if (userId == null) userId = sessionId;
             if (name == null) name = "Anonymous";
 
-            System.out.println("Join request - Room: " + roomId + ", User: " + name + " (ID: " + userId + "), Session: " + sessionId);
+            logger.debug("presence_join_request roomId={} userId={} sessionId={}", roomId, userId, sessionId);
 
             // Update session attributes with the final values
             sha.getSessionAttributes().put("userId", userId);
@@ -86,7 +87,7 @@ public class EnhancedPresenceController {
                                 new ChatEvent("system_message", roomId, systemMessage, null));
                     }
                 } catch (Exception e) {
-                    System.err.println("Error creating join system message: " + e.getMessage());
+                    logger.warn("presence_join_system_message_failed roomId={} error={}", roomId, e.toString());
                 }
             }
 
@@ -97,12 +98,11 @@ public class EnhancedPresenceController {
                         new PresenceEvent("presence_join", roomId,
                                 new UserPresence(userId, name), users));
             } catch (Exception e) {
-                System.err.println("Error broadcasting presence join: " + e.getMessage());
+                logger.warn("presence_join_broadcast_failed roomId={} error={}", roomId, e.toString());
             }
 
         } catch (Exception e) {
-            System.err.println("Error in join method: " + e.getMessage());
-            e.printStackTrace();
+            logger.error("presence_join_failed roomId={} error={}", roomId, e.toString());
         }
     }
 
@@ -110,10 +110,10 @@ public class EnhancedPresenceController {
     public void leave(@DestinationVariable String roomId, @Payload Map<String, String> payload, StompHeaderAccessor sha) {
         try {
             String sessionId = sha.getSessionId();
-            System.out.println("Leave request - Room: " + roomId + ", Session: " + sessionId);
+            logger.debug("presence_leave_request roomId={} sessionId={}", roomId, sessionId);
 
             presence.leaveBySession(sessionId).ifPresent(binding -> {
-                System.out.println("User truly left room: " + binding.name() + " from room: " + binding.roomId());
+                logger.info("presence_user_left roomId={} user={}", binding.roomId(), binding.name());
 
                 // Create system message for user leaving
                 try {
@@ -125,7 +125,7 @@ public class EnhancedPresenceController {
                                 new ChatEvent("system_message", roomId, systemMessage, null));
                     }
                 } catch (Exception e) {
-                    System.err.println("Error creating leave system message: " + e.getMessage());
+                    logger.warn("presence_leave_system_message_failed roomId={} error={}", roomId, e.toString());
                 }
 
                 // Broadcast presence update
@@ -137,28 +137,25 @@ public class EnhancedPresenceController {
                     
                     // Check if room is empty
                     if (users.isEmpty()) {
-                        System.out.println("Room " + roomId + " is empty. Initiating clean up...");
+                        logger.info("presence_room_empty_cleanup_start roomId={}", roomId);
                         try {
                             // Delete all data associated with the room
                             drawingOperationRepository.deleteAllByRoomId(roomId);
                             textOperationRepository.deleteAllByRoomId(roomId);
                             chatService.clearRoomMessages(roomId);
                             roomRepository.deleteById(roomId);
-                            
-                            System.out.println("Room " + roomId + " and all associated data deleted.");
+                            logger.info("presence_room_cleanup_complete roomId={}", roomId);
                         } catch (Exception cleanupError) {
-                            System.err.println("Error cleaning up room " + roomId + ": " + cleanupError.getMessage());
-                            cleanupError.printStackTrace();
+                            logger.error("presence_room_cleanup_failed roomId={} error={}", roomId, cleanupError.toString());
                         }
                     }
                     
                 } catch (Exception e) {
-                    System.err.println("Error broadcasting presence leave: " + e.getMessage());
+                    logger.warn("presence_leave_broadcast_failed roomId={} error={}", roomId, e.toString());
                 }
             });
         } catch (Exception e) {
-            System.err.println("Error in leave method: " + e.getMessage());
-            e.printStackTrace();
+            logger.error("presence_leave_failed roomId={} error={}", roomId, e.toString());
         }
     }
 }

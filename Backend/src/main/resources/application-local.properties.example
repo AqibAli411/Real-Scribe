@@ -1,0 +1,13 @@
+# Local-only Postgres credentials (not committed).
+# Copy to application-local.properties (gitignored) and set your password.
+#
+#   cp src/main/resources/application-local.properties.example src/main/resources/application-local.properties
+#
+# Default app user in application.properties is aqib-ali — override here if needed:
+# spring.datasource.username=aqib-ali
+# spring.datasource.password=your-password
+#
+# Or export: SPRING_DATASOURCE_USERNAME / SPRING_DATASOURCE_PASSWORD
+
+spring.datasource.username=aqib-ali
+spring.datasource.password=REPLACE_WITH_YOUR_POSTGRES_PASSWORD

@@ -1,30 +1,11 @@
-// useCollaboration.jsx (unchanged from last version, but verify me is stable)
 import { useEffect, useState, useRef } from "react";
 import { useWebSocket } from "../context/useWebSocketContext";
-
-
-// Get API URL with validation - must be called at runtime, not module level
-const getApiUrl = () => {
-  const url = import.meta.env.VITE_API_URL;
-  if (!url || url === 'undefined' || url.includes('localhost')) {
-    console.error('VITE_API_URL is not set or is invalid. Current value:', url);
-    console.error('Please set VITE_API_URL in Vercel environment variables to your Render backend URL (e.g., https://your-backend.onrender.com)');
-    return null;
-  }
-  // Ensure URL uses HTTPS if we're on HTTPS
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('http://')) {
-    console.warn('Converting HTTP to HTTPS for API URL');
-    return url.replace('http://', 'https://');
-  }
-  return url;
-};
+import { getApiUrl } from "../utils/api";
 
 export default function useCollaboration(roomId, me) {
   const [users, setUsers] = useState([]);
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const hasJoinedRef = useRef(false);
-  const cleanupRef = useRef(null);
   const messageIdsRef = useRef(new Set());
 
   if (!roomId || !me?.id || !me?.name) {
@@ -47,14 +28,12 @@ export default function useCollaboration(roomId, me) {
   }, [me.id, me.name, connectWithUser]);
 
   useEffect(() => {
-    console.log("this doesnt run");
-
     if (!isReady) return;
+
     const presenceTopic = `/topic/room.${roomId}.presence`;
     const presenceHandler = (message) => {
       try {
         const data = JSON.parse(message.body);
-        console.log("Presence event:", data);
         if (data.type === "presence_join") {
           const updatedUsers = data.users.map((user) => ({
             ...user,
@@ -88,7 +67,6 @@ export default function useCollaboration(roomId, me) {
     const chatHandler = (message) => {
       try {
         const data = JSON.parse(message.body);
-        console.log("Chat event:", data);
         if (data.type === "message_sent" || data.type === "system_message") {
           const newMessage = data.message;
           if (
@@ -106,8 +84,6 @@ export default function useCollaboration(roomId, me) {
               }
               return prevMessages;
             });
-          } else {
-            console.log("Duplicate message ignored:", newMessage?.id);
           }
         } else if (data.type === "message_history") {
           const newMessages = data.messages || [];
@@ -137,42 +113,36 @@ export default function useCollaboration(roomId, me) {
 
     const loadData = async () => {
       const apiUrl = getApiUrl();
-      
-      if (!apiUrl || !roomId) {
-        console.error('Cannot load collaboration data: API URL or roomId is not configured', { apiUrl, roomId });
+
+      if (!roomId) {
         setIsLoading(false);
         return;
       }
-      
-      // Validate URL format
-      if (apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1') || !apiUrl.startsWith('http')) {
-        console.error('Invalid API URL detected:', apiUrl);
-        setIsLoading(false);
-        return;
-      }
-      
-      const usersUrl = `${apiUrl}/api/rooms/${roomId}/users`;
-      const messagesUrl = `${apiUrl}/api/rooms/${roomId}/messages?limit=100`;
-      
-      console.log('Fetching collaboration data from:', { usersUrl, messagesUrl });
-      
+
       try {
         const [usersResponse, messagesResponse] = await Promise.all([
-          fetch(usersUrl),
-          fetch(messagesUrl),
+          fetch(`${apiUrl}/api/rooms/${roomId}/users`),
+          fetch(`${apiUrl}/api/rooms/${roomId}/messages?limit=100`),
         ]);
 
         const usersData = usersResponse.ok ? await usersResponse.json() : [];
-        console.log("tracking users: ", usersData);
         const messagesData = messagesResponse.ok
           ? await messagesResponse.json()
           : [];
+
+        // REST returns { id, name } only — same shape as WS but without `type`.
+        // Without type, ChatSection's "online" filter sees 0 users. Also, this fetch
+        // can run after WS presence and overwrite typed users — normalize here.
+        const usersWithPresenceType = usersData.map((user) => ({
+          ...user,
+          type: "joining",
+        }));
 
         messagesData.forEach((msg) => {
           if (msg.id) messageIdsRef.current.add(msg.id);
         });
 
-        setUsers(usersData);
+        setUsers(usersWithPresenceType);
         setMessages(messagesData);
       } catch (error) {
         console.error("Failed to load collaboration data:", error);
@@ -193,41 +163,20 @@ export default function useCollaboration(roomId, me) {
           userId: me.id,
           name: me.name,
         });
-        hasJoinedRef.current = true;
       } catch (error) {
         console.error("Failed to join room:", error);
       }
     }
-
-    cleanupRef.current = () => {
-      if (isReady && hasJoinedRef.current) {
-        try {
-          publish(`/app/room/${roomId}/presence.leave`, {
-            userId: me.id,
-            name: me.name,
-          });
-          hasJoinedRef.current = false;
-        } catch (error) {
-          console.error("Failed to leave room:", error);
-        }
-      }
-    };
-
-    return cleanupRef.current;
   }, [isReady, roomId, me.id, me.name, publish]);
 
   useEffect(() => {
     return () => {
-      if (cleanupRef.current) {
-        cleanupRef.current();
-      }
       messageIdsRef.current.clear();
     };
   }, []);
 
   const sendMessage = (content) => {
     if (!isReady || !content.trim()) {
-      console.warn("Cannot send message: not ready or empty content");
       return false;
     }
 

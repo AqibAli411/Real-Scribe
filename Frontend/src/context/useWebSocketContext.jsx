@@ -8,45 +8,16 @@ import {
 } from "react";
 import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
+import { getWsUrl } from "../utils/api";
 
 // Create the WebSocket Context
 const WebSocketContext = createContext(null);
-// Get WebSocket URL - use VITE_WS_URL if set, otherwise fallback to VITE_API_URL
-// Must be called at runtime to access window object
-const getWebSocketUrl = () => {
-  const wsUrl = import.meta.env.VITE_WS_URL || import.meta.env.VITE_API_URL;
-  
-  if (!wsUrl || wsUrl === 'undefined' || wsUrl.includes('localhost')) {
-    console.error('WebSocket URL is not configured. Current value:', wsUrl);
-    return null;
-  }
-  
-  // Remove any trailing slashes and any existing /ws path
-  let cleanUrl = wsUrl.trim().replace(/\/+$/, '').replace(/\/ws\/?$/, '');
-  
-  // Remove any protocol if present (we'll add the correct one)
-  cleanUrl = cleanUrl.replace(/^https?:\/\//, '');
-  
-  // Remove any ws:// or wss:// if somehow present
-  cleanUrl = cleanUrl.replace(/^wss?:\/\//, '');
-  
-  // Determine protocol based on current page
-  // When on HTTPS (Vercel), we need HTTPS for the backend URL
-  const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'https://' : 'http://';
-  
-  // Construct final URL: protocol + clean URL + /ws
-  const finalUrl = `${protocol}${cleanUrl}/ws`;
-  
-  return finalUrl;
-};
 
 // WebSocket Provider Component (used in parent, e.g., App.js)
 export function WebSocketProvider({ children }) {
   const [connected, setConnected] = useState(false);
   const clientRef = useRef(null);
   const subscriptionsRef = useRef(new Map()); // Track active subscriptions
-
-  // const userRef = useRef({ id: null, name: null }); // Use ref to avoid state re-renders
   const [user, setUser] = useState({ id: null, name: null });
 
   // Function to update user and connect WebSocket
@@ -55,79 +26,35 @@ export function WebSocketProvider({ children }) {
       console.error("User ID and name are required for WebSocket connection");
       return;
     }
-
     setUser(userData);
-    // Only update if user data changes
-    // if (
-    //   userRef.current.id !== userData.id ||
-    //   userRef.current.name !== userData.name
-    // ) {
-    //   console.log("Updating user data:", userData);
-    //   userRef.current.id = userData.id;
-    //   userRef.current.name = userData.name;
-    // }
   }, []);
 
   useEffect(() => {
     // Only connect if user data is available and client is not already active
-    if (
-      // !userRef.current.id ||
-      // !userRef.current.name ||
-      !user.id ||
-      !user.name ||
-      clientRef.current?.active
-    ) {
-      console.log("Skipping WebSocket connection:", {
-        // hasUser: !!userRef.current.id && !!userRef.current.name,
-        hasUser: !!user.id && !!user.name,
-        isClientActive: !!clientRef.current?.active,
-      });
+    if (!user.id || !user.name || clientRef.current?.active) {
       return;
     }
 
-    // Get WebSocket URL at runtime
-    const webSocketUrl = getWebSocketUrl();
-    
-    // Check if WebSocket URL is configured
-    if (!webSocketUrl) {
-      console.error("WebSocket URL is not configured. Please set VITE_WS_URL or VITE_API_URL environment variable in Vercel.");
-      return;
-    }
-    
-    // Validate URL doesn't contain localhost
-    if (webSocketUrl.includes('localhost') || webSocketUrl.includes('127.0.0.1')) {
-      console.error("Invalid WebSocket URL (contains localhost):", webSocketUrl);
-      return;
-    }
-    
-    console.log('Connecting to WebSocket:', webSocketUrl);
+    const webSocketUrl = getWsUrl();
 
-    // SockJS expects HTTP/HTTPS URLs and handles WebSocket protocol conversion internally
-    // When the page is loaded over HTTPS, SockJS will automatically use secure WebSocket (WSS)
-    // The URL should already be HTTPS if we're on HTTPS (handled in getWebSocketUrl)
     const client = new Client({
       webSocketFactory: () => {
-        // Final validation
-        if (!webSocketUrl || webSocketUrl.includes('localhost')) {
-          throw new Error('Invalid WebSocket URL: ' + webSocketUrl);
-        }
-        
-        // Ensure URL is properly formatted (should already be correct from getWebSocketUrl)
-        // Just ensure it's HTTPS if we're on HTTPS page
+        // SockJS expects http(s) URLs — it handles ws(s) upgrade internally
         let finalUrl = webSocketUrl;
-        if (window.location.protocol === 'https:' && finalUrl.startsWith('http://')) {
-          finalUrl = finalUrl.replace('http://', 'https://');
-          console.log('Converted WebSocket URL to HTTPS:', finalUrl);
+
+        // Ensure HTTPS if page is loaded over HTTPS
+        if (
+          window.location.protocol === "https:" &&
+          finalUrl.startsWith("http://")
+        ) {
+          finalUrl = finalUrl.replace("http://", "https://");
         }
-        
-        // Validate URL format - should be https://domain.com/ws (not wss:// or ws://)
-        if (finalUrl.startsWith('ws://') || finalUrl.startsWith('wss://')) {
-          console.error('Invalid WebSocket URL format (should be http:// or https://, not ws:// or wss://):', finalUrl);
-          // Try to fix it
-          finalUrl = finalUrl.replace(/^wss?:\/\//, 'https://');
+
+        // Fix accidentally passed ws:// or wss:// (SockJS needs http/https)
+        if (finalUrl.startsWith("ws://") || finalUrl.startsWith("wss://")) {
+          finalUrl = finalUrl.replace(/^wss?:\/\//, "https://");
         }
-        
-        console.log('Creating SockJS connection to:', finalUrl);
+
         return new SockJS(finalUrl);
       },
       reconnectDelay: 5000,
@@ -137,35 +64,36 @@ export function WebSocketProvider({ children }) {
         userId: user.id,
         name: user.name,
       },
-      debug: (str) => console.log("STOMP:", str),
+      debug:
+        import.meta.env.DEV
+          ? (str) => console.debug("STOMP:", str)
+          : () => {},
     });
 
-    client.onConnect = (frame) => {
-      console.log("Connected to WebSocket:", frame);
-      console.log(import.meta.env)
+    client.onConnect = () => {
       setConnected(true);
       // Re-subscribe to existing subscriptions
-      subscriptionsRef.current.forEach((handler, topic) => {
+      subscriptionsRef.current.forEach((subInfo, topic) => {
         try {
           const subscription = client.subscribe(topic, (message) => {
-            console.log(`Received message on ${topic}:`, message);
-            handler(message);
+            subInfo.handler(message);
           });
-          subscriptionsRef.current.set(topic, { handler, subscription });
-          console.log(`Re-subscribed to: ${topic}`);
+          subscriptionsRef.current.set(topic, {
+            handler: subInfo.handler,
+            subscription,
+          });
         } catch (error) {
           console.error(`Failed to re-subscribe to ${topic}:`, error);
         }
       });
     };
 
-    client.onDisconnect = (frame) => {
-      console.log("Disconnected from WebSocket:", frame);
+    client.onDisconnect = () => {
       setConnected(false);
     };
 
     client.onStompError = (frame) => {
-      console.error("STOMP error:", frame);
+      console.error("STOMP error:", frame.headers?.message || frame);
       setConnected(false);
     };
 
@@ -178,12 +106,10 @@ export function WebSocketProvider({ children }) {
     clientRef.current = client;
 
     return () => {
-      console.log("Cleaning up WebSocket connection in Provider");
       subscriptionsRef.current.forEach(({ subscription }, topic) => {
         try {
           if (subscription) {
             subscription.unsubscribe();
-            console.log(`Unsubscribed from: ${topic}`);
           }
         } catch (error) {
           console.error(`Error unsubscribing from ${topic}:`, error);
@@ -200,25 +126,23 @@ export function WebSocketProvider({ children }) {
       }
       clientRef.current = null;
     };
-  }, [user.id, user.name]); // Empty deps: run once unless manually triggered
+  }, [user.id, user.name]);
 
   // Subscribe to a topic
   const subscribe = useCallback((topic, handler) => {
     if (!clientRef.current?.connected) {
-      console.warn(`Client not connected; queuing subscription for ${topic}`);
+      // Queue subscription for when connection is established
       subscriptionsRef.current.set(topic, { handler, subscription: null });
       return;
     }
 
     if (subscriptionsRef.current.has(topic)) {
-      console.warn(`Already subscribed to ${topic}`);
-      return;
+      return; // Already subscribed
     }
 
     try {
       const subscription = clientRef.current.subscribe(topic, handler);
       subscriptionsRef.current.set(topic, { handler, subscription });
-      console.log(`Subscribed to: ${topic}`);
     } catch (error) {
       console.error(`Failed to subscribe to ${topic}:`, error);
     }
@@ -231,7 +155,6 @@ export function WebSocketProvider({ children }) {
       try {
         if (subInfo.subscription) {
           subInfo.subscription.unsubscribe();
-          console.log(`Unsubscribed from: ${topic}`);
         }
         subscriptionsRef.current.delete(topic);
       } catch (error) {
@@ -243,7 +166,7 @@ export function WebSocketProvider({ children }) {
   // Publish a message
   const publish = useCallback((destination, body, headers = {}) => {
     if (!clientRef.current?.connected) {
-      console.error("Cannot publish: Client not connected");
+      console.warn("Cannot publish: Client not connected");
       return;
     }
 
@@ -253,7 +176,6 @@ export function WebSocketProvider({ children }) {
         body: JSON.stringify(body),
         headers,
       });
-      console.log(`Published to ${destination}:`, body);
     } catch (error) {
       console.error(`Failed to publish to ${destination}:`, error);
     }

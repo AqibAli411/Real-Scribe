@@ -12,6 +12,8 @@ out/
 .env
 .env.local
 .env.*.local
+Backend/src/main/resources/application-local.properties
+.envrc
 
 # === IDEs ===
 .vscode/
@@ -19,7 +21,6 @@ out/
 *.iml
 *.ipr
 *.iws
-*.md
 
 # === Java / Spring Boot ===
 HELP.md
@@ -42,3 +43,14 @@ pnpm-debug.log*
 lerna-debug.log*
 dist-ssr/
 *.local
+
+# === Security-sensitive files ===
+*.pem
+*.key
+*.pfx
+*.p12
+*.jks
+id_rsa
+id_ed25519
+gitleaks-report.json
+trivy-report.json

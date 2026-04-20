@@ -127,11 +127,12 @@ export default function Details() {
                   <Lightbulb className="h-8 w-8 text-white" strokeWidth={1.5} />
                 </div>
                 <h3 className="mb-4 text-xl leading-tight font-semibold text-gray-900">
-                  AI Creative Insights
+                  Smart Writing Workspace
                 </h3>
                 <p className="text-sm leading-relaxed font-normal text-gray-500">
-                  Analyzes creative elements like images, videos, and text to
-                  boost engagement
+                  Organize ideas, meeting notes, and drafts in one shared space
+                  so everyone can write, review, and refine content together in
+                  real time.
                 </p>
               </div>
             </div>
@@ -156,11 +157,12 @@ export default function Details() {
                   />
                 </div>
                 <h3 className="mb-4 text-xl leading-tight font-semibold text-gray-900">
-                  AI Performance Prediction
+                  Room Activity Tracking
                 </h3>
                 <p className="text-sm leading-relaxed font-normal text-gray-500">
-                  Predicts campaign outcomes using historical data and market
-                  trends
+                  Keep collaboration organized with live room updates, shared
+                  context, and synchronized changes so team members stay aligned
+                  while working.
                 </p>
               </div>
             </div>

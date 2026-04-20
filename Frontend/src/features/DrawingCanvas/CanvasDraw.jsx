@@ -2,8 +2,6 @@ import { forwardRef, useEffect, useState } from "react";
 
 const CanvasDraw = forwardRef(function CanvasDraw(
   {
-    isPanning,
-    currentToolRef,
     canvasRef,
     handlePointerDown,
     handlePointerMove,
@@ -12,7 +10,6 @@ const CanvasDraw = forwardRef(function CanvasDraw(
     zoomOut,
     scheduleRedraw,
     getCanvasPoint,
-    isDownPressed,
   },
   ref,
 ) {
@@ -35,7 +32,6 @@ const CanvasDraw = forwardRef(function CanvasDraw(
       if (e.key === " " || e.code === "Space") {
         e.preventDefault();
         setIsGrabbing(false);
-        console.log("is grabbing false");
         return;
       }
     };
@@ -43,7 +39,6 @@ const CanvasDraw = forwardRef(function CanvasDraw(
     const handleKeyDown = (e) => {
       if (e.key === " " || e.code === "Space") {
         e.preventDefault();
-        console.log("is grabbing true");
         setIsGrabbing(true);
         return;
       }
@@ -66,9 +61,6 @@ const CanvasDraw = forwardRef(function CanvasDraw(
     scheduleRedraw,
     zoomIn,
     zoomOut,
-    isPanning,
-    currentToolRef,
-    isDownPressed,
     ref,
   ]);
 
@@ -77,13 +69,10 @@ const CanvasDraw = forwardRef(function CanvasDraw(
       <canvas
         ref={canvasRef}
         onPointerDown={(e) => {
-          console.log("is down true");
           SetIsMouseDown(true);
           handlePointerDown(e);
         }}
         onPointerUp={(e) => {
-          console.log("is down false");
-
           SetIsMouseDown(false);
           handlePointerUp(e);
         }}

@@ -1,6 +1,8 @@
 package com.realscribe.realscribe.Service;
 
 import com.realscribe.realscribe.DTO.ChatMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -9,6 +11,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class ChatService {
+    private static final Logger logger = LoggerFactory.getLogger(ChatService.class);
 
     // roomId -> List of messages (in memory for now, use DB in production)
     private final Map<String, List<ChatMessage>> roomMessages = new ConcurrentHashMap<>();
@@ -38,10 +41,10 @@ public class ChatService {
 
         if (!isDuplicate) {
             messages.add(message);
-            System.out.println("Message added: " + messageId + " from user: " + senderName);
+            logger.debug("chat_message_added roomId={} messageId={} user={}", roomId, messageId, senderName);
             return message;
         } else {
-            System.out.println("Duplicate message detected and ignored: " + content + " from user: " + senderName);
+            logger.debug("chat_message_duplicate_ignored roomId={} user={}", roomId, senderName);
             return null; // Return null for duplicates
         }
     }
@@ -69,10 +72,10 @@ public class ChatService {
 
         if (!isDuplicate) {
             messages.add(systemMessage);
-            System.out.println("System message added: " + messageId + " - " + content);
+            logger.debug("system_message_added roomId={} messageId={}", roomId, messageId);
             return systemMessage;
         } else {
-            System.out.println("Duplicate system message detected and ignored: " + content);
+            logger.debug("system_message_duplicate_ignored roomId={}", roomId);
             return null;
         }
     }
@@ -111,7 +114,7 @@ public class ChatService {
         if (roomMessages.containsKey(roomId)) {
             roomMessages.remove(roomId);
             messageCounters.remove(roomId);
-            System.out.println("Cleared all messages for room: " + roomId);
+            logger.info("chat_room_messages_cleared roomId={}", roomId);
         }
     }
 
@@ -124,7 +127,7 @@ public class ChatService {
                 for (int i = 0; i < removeCount; i++) {
                     messages.remove(0);
                 }
-                System.out.println("Cleared " + removeCount + " old messages from room: " + roomId);
+                logger.debug("chat_old_messages_cleared roomId={} removed={}", roomId, removeCount);
             }
         }
     }

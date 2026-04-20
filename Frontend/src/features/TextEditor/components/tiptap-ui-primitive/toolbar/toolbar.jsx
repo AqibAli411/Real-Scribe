@@ -16,36 +16,6 @@ const mergeRefs = (refs) => {
   };
 };
 
-const useObserveVisibility = (ref, callback) => {
-  React.useEffect(() => {
-    const element = ref.current;
-    if (!element) return;
-
-    let isMounted = true;
-
-    if (isMounted) {
-      requestAnimationFrame(callback);
-    }
-
-    const observer = new MutationObserver(() => {
-      if (isMounted) {
-        requestAnimationFrame(callback);
-      }
-    });
-
-    observer.observe(element, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-    });
-
-    return () => {
-      isMounted = false;
-      observer.disconnect();
-    };
-  }, [ref, callback]);
-};
-
 const useToolbarKeyboardNav = (toolbarRef) => {
   React.useEffect(() => {
     const toolbar = toolbarRef.current;
@@ -137,106 +107,11 @@ const useToolbarKeyboardNav = (toolbarRef) => {
   }, [toolbarRef]);
 };
 
-const useToolbarVisibility = (ref) => {
-  const [isVisible, setIsVisible] = React.useState(true);
-  const isMountedRef = React.useRef(false);
+const useToolbarVisibility = () => true;
 
-  React.useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
+const useGroupVisibility = () => true;
 
-  const checkVisibility = React.useCallback(() => {
-    if (!isMountedRef.current) return;
-
-    const toolbar = ref.current;
-    if (!toolbar) return;
-
-    // Check if any group has visible children
-    const hasVisibleChildren = Array.from(toolbar.children).some((child) => {
-      if (!(child instanceof HTMLElement)) return false;
-      if (child.getAttribute("role") === "group") {
-        return child.children.length > 0;
-      }
-      return false;
-    });
-
-    setIsVisible(hasVisibleChildren);
-  }, [ref]);
-
-  useObserveVisibility(ref, checkVisibility);
-  return isVisible;
-};
-
-const useGroupVisibility = (ref) => {
-  const [isVisible, setIsVisible] = React.useState(true);
-  const isMountedRef = React.useRef(false);
-
-  React.useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  const checkVisibility = React.useCallback(() => {
-    if (!isMountedRef.current) return;
-
-    const group = ref.current;
-    if (!group) return;
-
-    const hasVisibleChildren = Array.from(group.children).some((child) => {
-      if (!(child instanceof HTMLElement)) return false;
-      return true;
-    });
-
-    setIsVisible(hasVisibleChildren);
-  }, [ref]);
-
-  useObserveVisibility(ref, checkVisibility);
-  return isVisible;
-};
-
-const useSeparatorVisibility = (ref) => {
-  const [isVisible, setIsVisible] = React.useState(true);
-  const isMountedRef = React.useRef(false);
-
-  React.useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  const checkVisibility = React.useCallback(() => {
-    if (!isMountedRef.current) return;
-
-    const separator = ref.current;
-    if (!separator) return;
-
-    const prevSibling = separator.previousElementSibling;
-    const nextSibling = separator.nextElementSibling;
-
-    if (!prevSibling || !nextSibling) {
-      setIsVisible(false);
-      return;
-    }
-
-    const areBothGroups =
-      prevSibling.getAttribute("role") === "group" &&
-      nextSibling.getAttribute("role") === "group";
-
-    const haveBothChildren =
-      prevSibling.children.length > 0 && nextSibling.children.length > 0;
-
-    setIsVisible(areBothGroups && haveBothChildren);
-  }, [ref]);
-
-  useObserveVisibility(ref, checkVisibility);
-  return isVisible;
-};
+const useSeparatorVisibility = () => true;
 
 export const Toolbar = React.forwardRef(
   ({ children, className, variant = "fixed", ...props }, ref) => {

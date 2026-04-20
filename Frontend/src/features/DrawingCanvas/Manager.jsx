@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from "react";
+import { lazy, Suspense, useRef, useEffect, useCallback } from "react";
 import { useDrawingState } from "./hooks/useDrawingState";
 import { useCanvasRenderer } from "./hooks/useCanvasRenderer";
 import { useUndoRedo } from "./hooks/useUndoRedo";
@@ -7,8 +7,13 @@ import { useInfiniteCanvas } from "./hooks/useInfiniteCanvas";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import CanvasDraw from "./CanvasDraw";
 import DrawOptions from "../../components/DrawOptions";
-import SimpleEditor from "../TextEditor/components/tiptap-templates/simple/simple-editor";
 import { useWebSocket } from "../../context/useWebSocketContext";
+import { getApiUrl } from "../../utils/api";
+import { simplifyStroke } from "./utils/drawingUtils";
+
+const SimpleEditor = lazy(
+  () => import("../TextEditor/components/tiptap-templates/simple/simple-editor"),
+);
 
 export default function Manager({
   isDarkMode,
@@ -17,6 +22,9 @@ export default function Manager({
   mode,
   name,
 }) {
+  const sameUser = (leftId, rightId) =>
+    String(leftId ?? "") === String(rightId ?? "");
+
   const canvasRef = useRef(null);
   const containerRef = useRef();
   const ctxRef = useRef(null);
@@ -27,6 +35,16 @@ export default function Manager({
   const currentToolRef = useRef("pen");
   const pointBuffer = useRef([]); // Buffer for batching network updates
   const completedStrokeIdsRef = useRef(new Set()); // Track completed stroke IDs to prevent race conditions
+  const lastMovePublishTimeRef = useRef(0);
+  const moveNetConfigRef = useRef({
+    intervalMs: 40,
+    maxPointsPerPacket: 24,
+    moveSimplifyTolerance: 0.7,
+    endSimplifyTolerance: 0.85,
+  });
+
+  // Network tuning for production: smooth live preview with less socket pressure.
+  // This adapts to low-network profiles via Network Information API when available.
 
   const { isReady, subscribe, unsubscribe, publish } = useWebSocket();
 
@@ -94,15 +112,7 @@ export default function Manager({
     //  clearHistory
   } = useUndoRedo(completedStrokes, scheduleRedraw);
 
-  const subUndo = useCallback(
-    (message) => {
-      if (!isMounted.current) return;
-
-      const { canUndo } = JSON.parse(message.body);
-      if (canUndo) undo();
-    },
-    [undo],
-  );
+  // Undo is handled locally via useKeyboardShortcuts + useUndoRedo
 
   //one method having different cases for type
   //if type is "clear" then only clear ones runs
@@ -124,12 +134,11 @@ export default function Manager({
             const pointsToProcess = payload.points || (payload.x ? [[payload.x, payload.y, payload.pressure]] : []);
 
             //doesn't run for one actually drawing ( doesn't run locally)
-            if (Number(userId) === Number(userWhoDraw)) return;
+            if (sameUser(userId, userWhoDraw)) return;
 
             // RACE CONDITION FIX: Ignore stroke_move for strokes that have already been completed
             // This prevents late-arriving messages from recreating deleted stroke entries
             if (completedStrokeIdsRef.current.has(incomingStrokeId)) {
-              console.log("Ignoring late stroke_move for completed stroke:", incomingStrokeId);
               return;
             }
 
@@ -188,7 +197,7 @@ export default function Manager({
             }
 
             if (
-              Number(userId) !== Number(userWhoDraw) &&
+              !sameUser(userId, userWhoDraw) &&
               currentStrokes &&
               currentStrokes.length > 0
             ) {
@@ -215,7 +224,7 @@ export default function Manager({
             const { erasedStrokes } = payload;
 
             // Don't process our own erase messages (already handled locally)
-            if (Number(userId) === Number(userWhoDraw)) {
+            if (sameUser(userId, userWhoDraw)) {
               return;
             }
 
@@ -261,16 +270,7 @@ export default function Manager({
     };
   }, [isReady, roomId, subscribe, unsubscribe, onMessage]);
 
-  const getApiUrl = () => {
-    const url = import.meta.env.VITE_API_URL;
-    if (!url || url === 'undefined' || url.includes('localhost')) {
-      return null;
-    }
-    if (window.location.protocol === 'https:' && url.startsWith('http://')) {
-      return url.replace('http://', 'https://');
-    }
-    return url;
-  };
+  // API URL is imported from utils/api
 
   // Set mounted flag and fetches inital data from backend
   useEffect(() => {
@@ -278,13 +278,7 @@ export default function Manager({
 
     async function fetchStrokes() {
       const apiUrl = getApiUrl();
-      if (!apiUrl) {
-        console.error('Cannot fetch strokes: API URL is not configured');
-        return;
-      }
-
       const drawUrl = `${apiUrl}/api/draw/${roomId}`;
-      console.log('Fetching strokes from:', drawUrl);
       const response = await fetch(drawUrl);
 
       if (!response.ok) {
@@ -355,6 +349,12 @@ export default function Manager({
     publish,
     isReady,
     containerRef,
+    onUndo: () => {
+      if (canUndo) {
+        undo();
+        scheduleRedraw();
+      }
+    },
     onRedo: () => {
       if (canRedo) {
         redo();
@@ -366,6 +366,94 @@ export default function Manager({
     isPanning,
     isDownPressed,
   });
+
+  useEffect(() => {
+    const updateNetworkProfile = () => {
+      const connection = navigator?.connection || navigator?.mozConnection || navigator?.webkitConnection;
+      if (!connection) {
+        moveNetConfigRef.current = {
+          intervalMs: 40,
+          maxPointsPerPacket: 24,
+          moveSimplifyTolerance: 0.7,
+          endSimplifyTolerance: 0.85,
+        };
+        return;
+      }
+
+      const effectiveType = connection.effectiveType || "";
+      const rtt = Number(connection.rtt || 0);
+      const downlink = Number(connection.downlink || 0);
+      const saveData = Boolean(connection.saveData);
+      const lowNetwork =
+        saveData ||
+        effectiveType === "2g" ||
+        effectiveType === "slow-2g" ||
+        rtt >= 250 ||
+        (downlink > 0 && downlink < 1.2);
+
+      if (lowNetwork) {
+        moveNetConfigRef.current = {
+          intervalMs: 85, // ~12fps wire updates on weak links
+          maxPointsPerPacket: 14,
+          moveSimplifyTolerance: 1.4,
+          endSimplifyTolerance: 1.1,
+        };
+        return;
+      }
+
+      const mediumNetwork =
+        effectiveType === "3g" || rtt >= 140 || (downlink > 0 && downlink < 3.5);
+
+      if (mediumNetwork) {
+        moveNetConfigRef.current = {
+          intervalMs: 55,
+          maxPointsPerPacket: 18,
+          moveSimplifyTolerance: 1.0,
+          endSimplifyTolerance: 0.95,
+        };
+        return;
+      }
+
+      moveNetConfigRef.current = {
+        intervalMs: 35, // ~28fps on strong links
+        maxPointsPerPacket: 24,
+        moveSimplifyTolerance: 0.7,
+        endSimplifyTolerance: 0.85,
+      };
+    };
+
+    updateNetworkProfile();
+    const connection = navigator?.connection || navigator?.mozConnection || navigator?.webkitConnection;
+    if (!connection?.addEventListener) return;
+    connection.addEventListener("change", updateNetworkProfile);
+    return () => connection.removeEventListener("change", updateNetworkProfile);
+  }, []);
+
+  const flushMoveBuffer = useCallback(() => {
+    if (!isReady || !currentStrokeId.current || pointBuffer.current.length === 0) {
+      return;
+    }
+
+    // Cap packet size so one frame never becomes too heavy.
+    const { maxPointsPerPacket, moveSimplifyTolerance } = moveNetConfigRef.current;
+    const pointsChunk = pointBuffer.current.slice(0, maxPointsPerPacket);
+    pointBuffer.current = pointBuffer.current.slice(pointsChunk.length);
+    const optimizedChunk = simplifyStroke(pointsChunk, moveSimplifyTolerance);
+
+    publish(`/app/room/${roomId}/msg`, {
+      type: "stroke_move",
+      roomId,
+      userId,
+      strokeId: currentStrokeId.current,
+      payload: {
+        points: optimizedChunk,
+        tool: currentToolRef.current,
+        width: penWidth.current,
+        color: colorRef.current,
+      },
+    });
+    lastMovePublishTimeRef.current = performance.now();
+  }, [isReady, publish, roomId, userId, currentStrokeId, currentToolRef, penWidth, colorRef]);
 
   const handlePointerDown = useCallback(
     (e) => {
@@ -408,22 +496,14 @@ export default function Manager({
         pointBuffer.current = [];
 
         const newStrokeId = startNewStroke(point);
+        lastMovePublishTimeRef.current = 0;
         scheduleRedraw();
 
-        publish(`/app/room/${roomId}/msg`, {
-          type: "stroke_move",
-          roomId,
-          userId,
-          strokeId: newStrokeId,
-          payload: {
-            x: point[0],
-            y: point[1],
-            pressure: point[2],
-            tool: currentToolRef.current,
-            width: penWidth.current,
-            color: colorRef.current,
-          },
-        });
+        // Keep protocol consistent: initial point is also batched.
+        pointBuffer.current.push([point[0], point[1], point[2]]);
+        if (newStrokeId) {
+          flushMoveBuffer();
+        }
       }
     },
     [
@@ -435,6 +515,7 @@ export default function Manager({
       startErasing,
       startNewStroke,
       scheduleRedraw,
+      flushMoveBuffer,
       // myUserId,
       isPanning,
       penWidth,
@@ -484,35 +565,22 @@ export default function Manager({
         // Regular drawing logic - only if actually drawing
         if (!isDrawing.current) return;
 
-        if (addPointToStroke(point)) scheduleRedraw();
+        const added = addPointToStroke(point);
+        if (!added) return;
+        scheduleRedraw();
 
         // Batch points for network efficiency
-        if (!pointBuffer.current) pointBuffer.current = [];
         pointBuffer.current.push([point[0], point[1], point[2]]);
 
         const now = performance.now();
+        const { intervalMs, maxPointsPerPacket } = moveNetConfigRef.current;
 
-        // Flush buffer every 30ms (approx 30fps network rate, but 60fps+ sampling)
-        if (now - lastEventTime.current >= 30) {
-          if (pointBuffer.current.length > 0) {
-            lastEventTime.current = now;
-
-            publish(`/app/room/${roomId}/msg`, {
-              type: "stroke_move",
-              roomId,
-              userId,
-              strokeId: currentStrokeId.current,
-              payload: {
-                points: pointBuffer.current, // Send array of points
-                tool: currentToolRef.current,
-                width: penWidth.current,
-                color: colorRef.current,
-              },
-            });
-
-            // Clear buffer after sending
-            pointBuffer.current = [];
-          }
+        // Publish preview packets at steady cadence, or earlier if packet gets big.
+        if (
+          now - lastMovePublishTimeRef.current >= intervalMs ||
+          pointBuffer.current.length >= maxPointsPerPacket
+        ) {
+          flushMoveBuffer();
         }
       }
     },
@@ -527,7 +595,7 @@ export default function Manager({
       continueErasing,
       addPointToStroke,
       scheduleRedraw,
-      currentStrokeId,
+      flushMoveBuffer,
       penWidth,
       colorRef,
       roomId,
@@ -554,8 +622,19 @@ export default function Manager({
     // Regular drawing logic
     if (!isDrawing.current || !isReady) return;
 
+    // Flush pending live points before sending final authoritative stroke.
+    while (pointBuffer.current.length > 0) {
+      flushMoveBuffer();
+    }
+
     const strokeData = clearLocalStroke();
     if (strokeData.points.length > 0) {
+      const { endSimplifyTolerance } = moveNetConfigRef.current;
+      const simplifiedPoints = simplifyStroke(
+        strokeData.points,
+        endSimplifyTolerance,
+      );
+
       const strokeWithMetadata = {
         points: strokeData.points,
         tool: currentToolRef.current,
@@ -574,7 +653,7 @@ export default function Manager({
         userId,
         strokeId: strokeData.id,
         payload: {
-          currentStrokes: strokeData.points,
+          currentStrokes: simplifiedPoints,
           tool: currentToolRef.current,
           width: penWidth.current,
           color: colorRef.current,
@@ -597,21 +676,28 @@ export default function Manager({
     clearLocalStroke,
     addCompletedStroke,
     addToHistory,
+    flushMoveBuffer,
     scheduleRedraw,
     penWidth,
     colorRef,
     roomId,
     userId,
   ]);
-
-  const lastEventTime = useRef(0);
   return (
     <div className="flex flex-3">
       <div
         className={`${mode === "text" ? "block" : "hidden"} flex-3 overflow-auto`}
       >
         <div className={`simple-editor-wrapper`}>
-          <SimpleEditor roomId={roomId} userId={userId} name={name} />
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center text-sm text-neutral-500 dark:text-neutral-400">
+                Loading editor...
+              </div>
+            }
+          >
+            <SimpleEditor roomId={roomId} userId={userId} name={name} />
+          </Suspense>
         </div>
       </div>
       <div
@@ -626,8 +712,6 @@ export default function Manager({
           canvasRef={canvasRef}
         />
         <CanvasDraw
-          isPanning={isPanning}
-          currentToolRef={currentToolRef}
           canvasRef={canvasRef}
           handlePointerDown={handlePointerDown}
           handlePointerMove={handlePointerMove}
@@ -636,7 +720,6 @@ export default function Manager({
           zoomOut={zoomOut}
           scheduleRedraw={scheduleRedraw}
           getCanvasPoint={getCanvasPoint}
-          isDownPressed={isDownPressed}
           ref={containerRef}
         />
       </div>

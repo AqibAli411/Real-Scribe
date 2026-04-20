@@ -1,5 +1,5 @@
 // RoomPage.jsx
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Clipboard,
   Check,
@@ -8,33 +8,51 @@ import {
   Plus,
   LogIn,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useWebSocket } from "../context/useWebSocketContext";
-import { ThemeToggle } from "../features/TextEditor/components/tiptap-templates/simple/theme-toggle";
+import { getApiUrl } from "../utils/api";
 
 export default function RoomPage() {
   const [name, setName] = useState("");
   const [roomId, setRoomId] = useState("");
   const [joinRoomId, setJoinRoomId] = useState("");
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isCreating, setIsCreating] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [nameError, setNameError] = useState("");
   const [roomIdError, setRoomIdError] = useState("");
+  const [submitError, setSubmitError] = useState("");
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const { connectWithUser } = useWebSocket();
 
-  // Memoize user data to prevent unnecessary updates
-  const userData = useMemo(() => ({ id: null, name: null }), []);
   // Auto-generate room ID when switching to create mode
   useEffect(() => {
     if (isCreating && !roomId) {
       generateRoomId();
     }
   }, [isCreating, roomId]);
+
+  // Allow header quick-join: /room?mode=join&room=ABC123
+  useEffect(() => {
+    const mode = searchParams.get("mode");
+    const room = (searchParams.get("room") || "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 6);
+
+    if (mode === "join") {
+      setIsCreating(false);
+    }
+    if (room) {
+      setJoinRoomId(room);
+      setRoomIdError("");
+    }
+  }, [searchParams]);
 
   const generateRoomId = async () => {
     setIsGenerating(true);
@@ -45,7 +63,6 @@ export default function RoomPage() {
     setIsGenerating(false);
   };
 
-  //method for copying the to clipboard
   const copyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(roomId);
@@ -82,97 +99,88 @@ export default function RoomPage() {
     return true;
   };
 
-  function randomNumber() {
-    return Math.round(Math.random() * 1000 + 1);
+  /** Generate a unique user ID using crypto API with numeric fallback */
+  function generateUserId() {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    // Fallback: timestamp + random for older browsers
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 
-  const getApiUrl = () => {
-    const url = import.meta.env.VITE_API_URL;
-    if (!url || url === 'undefined' || url.includes('localhost')) {
-      return null;
-    }
-    // Ensure HTTPS if we're on HTTPS
-    if (window.location.protocol === 'https:' && url.startsWith('http://')) {
-      return url.replace('http://', 'https://');
-    }
-    return url;
-  };
-  
   const handleCreate = async () => {
     if (!validateName(name)) return;
 
+    setIsSubmitting(true);
+    setSubmitError("");
     const apiUrl = getApiUrl();
-    if (!apiUrl) {
-      console.error('Cannot create room: API URL is not configured. Please set VITE_API_URL environment variable in Vercel.');
-      alert('Configuration error: API URL is not set. Please set VITE_API_URL in Vercel environment variables.');
-      return;
-    }
+    const userId = generateUserId();
 
-    const url = `${apiUrl}/api/room`;
-    console.log('Creating room with API URL:', url);
-    
     try {
-      const response = await fetch(url, {
+      const response = await fetch(`${apiUrl}/api/room`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: roomId,
-          userId: randomNumber(),
+          userId: 0, // Backend expects int, but the real ID is passed via query param
           username: name,
         }),
       });
 
-      //solve this mystry for me mama
-      const { id, username, userId } = await response.json();
-      userData.id = roomId;
-      userData.name = name;
-      navigate(`/room/${id}?name=${username}&id=${userId}`);
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const { id } = await response.json();
+
+      // Connect WebSocket with the user data
+      connectWithUser({ id: userId, name });
+
+      navigate(`/room/${id}?name=${encodeURIComponent(name)}&id=${encodeURIComponent(userId)}`, {
+        state: { fromRoomEntry: true },
+      });
     } catch (err) {
       console.error("Failed to create room:", err);
+      setSubmitError("Failed to create room. Please check your connection and try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleJoin = async () => {
     if (!validateName(name) || !validateRoomId(joinRoomId)) return;
 
+    setIsSubmitting(true);
+    setSubmitError("");
     const apiUrl = getApiUrl();
-    if (!apiUrl) {
-      console.error('Cannot join room: API URL is not configured. Please set VITE_API_URL environment variable in Vercel.');
-      alert('Configuration error: API URL is not set. Please set VITE_API_URL in Vercel environment variables.');
-      return;
-    }
+    const userId = generateUserId();
 
-    const url = `${apiUrl}/api/room`;
-    console.log('Joining room with API URL:', url);
-    
     try {
-      const response = await fetch(`${url}/${joinRoomId}`);
-      if (!response.ok) throw new Error("Room cannot be found!");
+      const response = await fetch(`${apiUrl}/api/room/${joinRoomId}`);
+      if (!response.ok) {
+        if (response.status === 404) {
+          setRoomIdError("Room not found. Check the ID and try again.");
+        } else {
+          throw new Error(`Server error: ${response.status}`);
+        }
+        return;
+      }
 
-      const { id, userId, username } = await response.json();
+      const { id } = await response.json();
 
-      console.log("from room controller : ", userId, " ", username);
+      // Connect WebSocket with the user data
+      connectWithUser({ id: userId, name });
 
-      const idOfUser = randomNumber();
-      userData.id = idOfUser;
-      userData.name = name;
-
-      navigate(`/room/${id}?name=${name}&id=${idOfUser}`);
+      navigate(`/room/${id}?name=${encodeURIComponent(name)}&id=${encodeURIComponent(userId)}`, {
+        state: { fromRoomEntry: true },
+      });
     } catch (err) {
       console.error("Failed to join room:", err);
+      setSubmitError("Failed to join room. Please check your connection and try again.");
+    } finally {
+      setIsSubmitting(false);
     }
-
-    console.log("here in the room page : ", userData);
   };
-
-  // Connect WebSocket after user data is set
-  useEffect(() => {
-    if (userData.id && userData.name) {
-      connectWithUser(userData);
-    }
-  }, [userData.id, userData.name, connectWithUser, userData]);
 
   const handleBack = () => {
     navigate(-1);
@@ -182,6 +190,7 @@ export default function RoomPage() {
     setIsCreating(creating);
     setNameError("");
     setRoomIdError("");
+    setSubmitError("");
     if (creating && !roomId) {
       generateRoomId();
     }
@@ -198,15 +207,13 @@ export default function RoomPage() {
           <ArrowLeft size={18} />
           Back
         </button>
-        {/* here theme button */}
-
       </div>
 
       {/* Main Card */}
       <div className="relative w-full max-w-lg rounded-2xl border border-neutral-200 bg-white p-8 shadow-lg dark:border-neutral-700 dark:bg-neutral-800">
 
         {/* Mode Toggle */}
-        <div  className="mb-8 flex rounded-xl bg-neutral-100 p-1 dark:bg-neutral-700">
+        <div className="mb-8 flex rounded-xl bg-neutral-100 p-1 dark:bg-neutral-700">
           <button
             onClick={() => handleModeSwitch(true)}
             className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-3 font-medium transition-all duration-200 ${
@@ -230,6 +237,13 @@ export default function RoomPage() {
             Join
           </button>
         </div>
+
+        {/* Error Banner */}
+        {submitError && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
+            {submitError}
+          </div>
+        )}
 
         {/* Form Content */}
         <div className="space-y-6">
@@ -319,12 +333,16 @@ export default function RoomPage() {
 
               <button
                 onClick={handleCreate}
-                disabled={isGenerating || !name.trim()}
+                disabled={isGenerating || !name.trim() || isSubmitting}
                 className="w-full rounded-xl bg-blue-600 py-3.5 font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-blue-700 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 disabled:hover:bg-blue-600"
               >
                 <span className="flex items-center justify-center gap-2">
-                  <Users size={20} />
-                  Create Room
+                  {isSubmitting ? (
+                    <Loader2 size={20} className="animate-spin" />
+                  ) : (
+                    <Users size={20} />
+                  )}
+                  {isSubmitting ? "Creating..." : "Create Room"}
                 </span>
               </button>
             </>
@@ -364,12 +382,16 @@ export default function RoomPage() {
 
               <button
                 onClick={handleJoin}
-                disabled={!name.trim() || !joinRoomId.trim()}
+                disabled={!name.trim() || !joinRoomId.trim() || isSubmitting}
                 className="w-full rounded-xl bg-blue-600 py-3.5 font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-blue-700 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 disabled:hover:bg-blue-600"
               >
                 <span className="flex items-center justify-center gap-2">
-                  <Users size={20} />
-                  Join Room
+                  {isSubmitting ? (
+                    <Loader2 size={20} className="animate-spin" />
+                  ) : (
+                    <Users size={20} />
+                  )}
+                  {isSubmitting ? "Joining..." : "Join Room"}
                 </span>
               </button>
             </>

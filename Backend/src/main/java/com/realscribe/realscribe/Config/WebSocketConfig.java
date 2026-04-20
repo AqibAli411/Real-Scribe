@@ -1,5 +1,6 @@
 package com.realscribe.realscribe.Config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
@@ -11,10 +12,18 @@ import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.messaging.Message;
 import org.springframework.context.annotation.Bean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Arrays;
 
 @Configuration
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+    private static final Logger logger = LoggerFactory.getLogger(WebSocketConfig.class);
+
+    @Value("${ALLOWED_ORIGINS:https://real-scribe.vercel.app,http://localhost:5173,http://localhost:3000}")
+    private String allowedOrigins;
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
@@ -25,8 +34,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        String[] origins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toArray(String[]::new);
+
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*")
+                .setAllowedOrigins(origins)
                 .withSockJS();
     }
 
@@ -48,9 +62,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                                 // Store in session attributes
                                 accessor.getSessionAttributes().put("userId", userId);
                                 accessor.getSessionAttributes().put("name", name);
-                                System.out.println("User connected: " + name + " (ID: " + userId + ")");
+                                logger.debug("User connected: {} ({})", name, userId);
                             } else {
-                                System.out.println("Warning: Missing user credentials in connect headers");
+                                logger.warn("Missing user credentials in connect headers");
                             }
                             break;
 
@@ -58,7 +72,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                             // Log disconnect
                             String disconnectingUserId = (String) accessor.getSessionAttributes().get("userId");
                             String disconnectingName = (String) accessor.getSessionAttributes().get("name");
-                            System.out.println("User disconnecting: " + disconnectingName + " (ID: " + disconnectingUserId + ")");
+                            logger.debug("User disconnecting: {} ({})", disconnectingName, disconnectingUserId);
                             break;
                     }
                 }

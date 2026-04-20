@@ -1,6 +1,8 @@
 package com.realscribe.realscribe.Service;
 
 import com.realscribe.realscribe.DTO.UserPresence;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.scheduling.annotation.Scheduled;
 
@@ -9,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class PresenceService {
+    private static final Logger logger = LoggerFactory.getLogger(PresenceService.class);
 
     // roomId -> userId -> set of sessionIds
     private final Map<String, Map<String, Set<String>>> roomUsers = new ConcurrentHashMap<>();
@@ -19,16 +22,13 @@ public class PresenceService {
 
     public synchronized boolean join(String roomId, String userId, String name, String sessionId) {
         if (roomId == null || userId == null || name == null || sessionId == null) {
-            System.err.println("Cannot join: null parameters - roomId: " + roomId + ", userId: " + userId + ", name: " + name + ", sessionId: " + sessionId);
+            logger.warn("presence_join_invalid_input roomId={} userId={} sessionId={}", roomId, userId, sessionId);
             return false;
         }
-
-        System.out.println("Joining room - Room: " + roomId + ", User: " + name + " (ID: " + userId + "), Session: " + sessionId);
 
         // Remove any existing session binding for this sessionId to prevent duplicates
         UserBinding existingBinding = sessions.remove(sessionId);
         if (existingBinding != null) {
-            System.out.println("Removed existing session binding for session: " + sessionId);
             // Clean up the old binding
             cleanupSessionFromRoom(existingBinding.roomId, existingBinding.userId, sessionId);
         }
@@ -42,24 +42,20 @@ public class PresenceService {
 
         boolean isFirstSession = userSessions.isEmpty();
         userSessions.add(sessionId);
-
-        System.out.println("User " + name + " now has " + userSessions.size() + " sessions in room " + roomId);
         return isFirstSession;
     }
 
     public synchronized Optional<UserBinding> leaveBySession(String sessionId) {
         if (sessionId == null) {
-            System.err.println("Cannot leave: sessionId is null");
+            logger.warn("presence_leave_invalid_input sessionId=null");
             return Optional.empty();
         }
 
         UserBinding binding = sessions.remove(sessionId);
         if (binding == null) {
-            System.out.println("No binding found for session: " + sessionId);
+            logger.debug("presence_leave_session_not_found sessionId={}", sessionId);
             return Optional.empty();
         }
-
-        System.out.println("Leaving session - Room: " + binding.roomId + ", User: " + binding.name + " (ID: " + binding.userId + "), Session: " + sessionId);
 
         boolean userFullyLeft = cleanupSessionFromRoom(binding.roomId, binding.userId, sessionId);
 
@@ -73,15 +69,13 @@ public class PresenceService {
         Set<String> sessionsForUser = users.get(userId);
         if (sessionsForUser != null) {
             sessionsForUser.remove(sessionId);
-            System.out.println("User " + userId + " now has " + sessionsForUser.size() + " sessions in room " + roomId);
 
             if (sessionsForUser.isEmpty()) {
                 users.remove(userId);
-                System.out.println("User " + userId + " fully left room " + roomId);
 
                 if (users.isEmpty()) {
                     roomUsers.remove(roomId);
-                    System.out.println("Room " + roomId + " is now empty");
+                    logger.info("presence_room_empty roomId={}", roomId);
                 }
                 return true; // User fully left
             }
@@ -113,8 +107,6 @@ public class PresenceService {
     // Cleanup orphaned sessions periodically
     @Scheduled(fixedRate = 300000) // Every 5 minutes
     public synchronized void cleanupOrphanedSessions() {
-        System.out.println("Running orphaned session cleanup...");
-
         Set<String> orphanedSessions = new HashSet<>();
 
         // Find sessions that exist in sessions map but not in roomUsers
@@ -131,28 +123,17 @@ public class PresenceService {
         orphanedSessions.forEach(sessionId -> {
             UserBinding removed = sessions.remove(sessionId);
             if (removed != null) {
-                System.out.println("Cleaned up orphaned session: " + sessionId + " for user: " + removed.name);
+                logger.debug("presence_orphaned_session_cleaned sessionId={} user={}", sessionId, removed.name);
             }
         });
 
         if (!orphanedSessions.isEmpty()) {
-            System.out.println("Cleaned up " + orphanedSessions.size() + " orphaned sessions");
+            logger.info("presence_orphaned_sessions_cleaned count={}", orphanedSessions.size());
         }
     }
 
     // Debug method to print current state
     public synchronized void printState() {
-        System.out.println("=== Presence Service State ===");
-        System.out.println("Sessions: " + sessions.size());
-        sessions.forEach((sessionId, binding) ->
-                System.out.println("  " + sessionId + " -> " + binding));
-
-        System.out.println("Room Users: " + roomUsers.size());
-        roomUsers.forEach((roomId, users) -> {
-            System.out.println("  Room " + roomId + ":");
-            users.forEach((userId, sessions) ->
-                    System.out.println("    User " + userId + " -> " + sessions));
-        });
-        System.out.println("==============================");
+        logger.debug("presence_state sessions={} rooms={}", sessions.size(), roomUsers.size());
     }
 }

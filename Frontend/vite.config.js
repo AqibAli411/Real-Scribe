@@ -24,8 +24,26 @@ export default defineConfig(({ mode }) => {
     optimizeDeps: {
       include: ["sockjs-client", "@stomp/stompjs"],
     },
+    build: {
+      sourcemap: false,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            "vendor-react": ["react", "react-dom", "react-router-dom"],
+            "vendor-websocket": ["@stomp/stompjs", "sockjs-client"],
+            "vendor-editor": ["@tiptap/react", "@tiptap/starter-kit"],
+            "vendor-ui": ["lucide-react"],
+          },
+        },
+      },
+    },
     server: {
       proxy: {
+        // Same-origin in dev: browser -> Vite -> Spring Boot (avoids CORS / failed cross-origin fetches)
+        "/api": {
+          target: apiUrl,
+          changeOrigin: true,
+        },
         "/ws": {
           target: apiUrl,
           ws: true,

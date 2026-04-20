@@ -1,6 +1,6 @@
 import { Send, Bot, Users, MoveLeft, MoveRight, Loader2 } from "lucide-react";
 import { memo, useEffect, useState, useRef } from "react";
-import useCollaboration from "../hooks/useCollabration";
+import useCollaboration from "../hooks/useCollaboration";
 
 // Helper functions - use the imported ones from utils in real implementation
 const formatTimestamp = (timestamp) => {
@@ -62,18 +62,12 @@ function ChatSection({
     setIsAiMode(!isAiMode);
   };
 
-  // Filter active users
-  const joiningUsers = users.filter((user) => user.type === "joining");
-  const onlineCount = joiningUsers.length;
+  // Online = anyone not explicitly "leaving" (REST users have no type until normalized)
+  const activeUsers = users.filter((user) => user.type !== "leaving");
+  const onlineCount = activeUsers.length;
 
-  useEffect(
-    function () {
-      console.log("messages ", messages);
-      console.log("users ", users);
-      console.log("joiningUsers ", joiningUsers);
-    },
-    [messages, users, joiningUsers],
-  );
+
+
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -96,7 +90,7 @@ function ChatSection({
               <MoveRight className="h-5 w-5 text-gray-600 dark:text-neutral-400" />
             </button>
             <div className="space-y-3">
-              {joiningUsers.slice(0, 8).map((user) => (
+              {activeUsers.slice(0, 8).map((user) => (
                 <div key={user.id} className="flex justify-center">
                   <div
                     className={`h-10 w-10 rounded-full ${getUserAvatarColor(user.name)} relative flex items-center justify-center text-sm font-medium text-white`}
@@ -106,10 +100,10 @@ function ChatSection({
                   </div>
                 </div>
               ))}
-              {joiningUsers.length > 8 && (
+              {activeUsers.length > 8 && (
                 <div className="flex justify-center">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-400 text-xs font-medium text-white dark:bg-neutral-600">
-                    +{joiningUsers.length - 8}
+                    +{activeUsers.length - 8}
                   </div>
                 </div>
               )}
@@ -134,9 +128,22 @@ function ChatSection({
                 <h2 className="font-semibold text-gray-900 dark:text-neutral-100">
                   {isAiMode ? "AI Assistant" : "Team Chat"}
                 </h2>
-                <p className="text-sm text-gray-500 dark:text-neutral-400">
-                  {isAiMode ? "Get AI-powered help" : `${onlineCount} online`}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-gray-500 dark:text-neutral-400">
+                    {isAiMode ? "Get AI-powered help" : `${onlineCount} online`}
+                  </p>
+                  {!isAiMode && (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        isReady
+                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                          : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                      }`}
+                    >
+                      {isReady ? "Connected" : "Reconnecting"}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex items-center justify-between gap-4 bg-white dark:bg-neutral-900">
                 <div className="flex items-center gap-2">

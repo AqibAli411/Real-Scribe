@@ -3,6 +3,8 @@ package com.realscribe.realscribe.Controller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.realscribe.realscribe.Entity.TextOperation;
 import com.realscribe.realscribe.Repo.TextOperationRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,8 +14,8 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/text")
-@CrossOrigin(origins = "https://real-scribe.vercel.app")
 public class TextOperationController {
+    private static final Logger logger = LoggerFactory.getLogger(TextOperationController.class);
 
     private final TextOperationRepository repo;
 
@@ -38,7 +40,7 @@ public class TextOperationController {
                             )
                     ));
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("text_latest_fetch_failed roomId={} error={}", roomId, e.toString());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of(
                             "exists", false,

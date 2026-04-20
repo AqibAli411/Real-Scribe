@@ -3,6 +3,8 @@ package com.realscribe.realscribe.Controller;
 import com.realscribe.realscribe.DTO.ChatEvent;
 import com.realscribe.realscribe.DTO.ChatMessage;
 import com.realscribe.realscribe.Service.ChatService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -16,8 +18,8 @@ import java.util.List;
 import java.util.Map;
 
 @Controller
-@CrossOrigin(origins = "https://real-scribe.vercel.app")
 public class ChatController {
+    private static final Logger logger = LoggerFactory.getLogger(ChatController.class);
 
     private final ChatService chatService;
     private final SimpMessagingTemplate broker;
@@ -40,12 +42,10 @@ public class ChatController {
             String name = (String) sha.getSessionAttributes().get("name");
             String content = payload.get("content");
 
-            System.out.println("Received message - Session: " + sessionId + ", User: " + name + " (ID: " + userId + "), Content: " + content);
-
             if (userId == null) userId = sessionId;
             if (name == null) name = "Anonymous";
             if (content == null || content.trim().isEmpty()) {
-                System.out.println("Ignoring empty message");
+                logger.debug("chat_empty_message_ignored roomId={} sessionId={}", roomId, sessionId);
                 return;
             }
 
@@ -54,16 +54,13 @@ public class ChatController {
 
             // Only broadcast if message was actually saved (not a duplicate)
             if (message != null) {
-                System.out.println("Broadcasting message: " + message.id());
+                logger.debug("chat_message_broadcast roomId={} messageId={}", roomId, message.id());
                 broker.convertAndSend("/topic/room." + roomId + ".chat",
                         new ChatEvent("message_sent", roomId, message, null));
-            } else {
-                System.out.println("Message was duplicate, not broadcasting");
             }
 
         } catch (Exception e) {
-            System.err.println("Error in sendMessage: " + e.getMessage());
-            e.printStackTrace();
+            logger.error("chat_send_failed roomId={} error={}", roomId, e.toString());
         }
     }
 
@@ -77,7 +74,7 @@ public class ChatController {
         try {
             return chatService.getRoomMessages(roomId, limit);
         } catch (Exception e) {
-            System.err.println("Error getting room messages: " + e.getMessage());
+            logger.error("chat_history_fetch_failed roomId={} error={}", roomId, e.toString());
             return new ArrayList<>();
         }
     }

@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@CrossOrigin(origins = "https://real-scribe.vercel.app")
 @RequestMapping("/api")
 public class PresenceRestController {
 

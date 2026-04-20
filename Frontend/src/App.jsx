@@ -1,8 +1,27 @@
+import { lazy, Suspense } from "react";
 import AppLayout from "./pages/AppLayout";
-import HomePage from "./pages/HomePage";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
-import DashBoard from "./pages/DashBoard";
-import RoomPage from "./pages/RoomPage";
+import RoomLayout from "./pages/RoomLayout";
+
+const HomePage = lazy(() => import("./pages/HomePage"));
+const RoomPage = lazy(() => import("./pages/RoomPage"));
+const DashBoard = lazy(() => import("./pages/DashBoard"));
+
+function PageLoader() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center text-sm text-neutral-500">
+      Loading...
+    </div>
+  );
+}
+
+function withSuspense(Component) {
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <Component />
+    </Suspense>
+  );
+}
 
 const router = createBrowserRouter([
   {
@@ -10,15 +29,21 @@ const router = createBrowserRouter([
     children: [
       {
         path: "/",
-        element: <HomePage />,
+        element: withSuspense(HomePage),
       },
       {
         path: "/room",
-        element: <RoomPage />,
-      },
-      {
-        path: "/room/:roomId",
-        element: <DashBoard />,
+        element: <RoomLayout />,
+        children: [
+          {
+            index: true,
+            element: withSuspense(RoomPage),
+          },
+          {
+            path: ":roomId",
+            element: withSuspense(DashBoard),
+          },
+        ],
       },
     ],
   },

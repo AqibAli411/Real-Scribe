@@ -7,15 +7,24 @@ import com.realscribe.realscribe.Entity.DrawingOperation;
 import com.realscribe.realscribe.Entity.TextOperation;
 import com.realscribe.realscribe.Repo.DrawingOperationRepository;
 import com.realscribe.realscribe.Repo.TextOperationRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.messaging.handler.annotation.*;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
+import org.springframework.transaction.annotation.Transactional;
+import jakarta.annotation.PreDestroy;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 @Controller
 public class WebSocketController {
+    private static final Logger logger = LoggerFactory.getLogger(WebSocketController.class);
+
     //this will be used to send the data
     private final SimpMessagingTemplate messaging;
     //this will be used to convert json <--> object
@@ -24,6 +33,8 @@ public class WebSocketController {
     private final DrawingOperationRepository opRepo;
 //    private final RoomRepository roomRepo;
     private final TextOperationRepository textRepo;
+    private final Map<String, WsMessage> pendingTextPatches = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService textPatchBroadcaster = Executors.newSingleThreadScheduledExecutor();
 
     //to maintain live users logic
 //    private final PresenceService presenceService;
@@ -35,10 +46,25 @@ public class WebSocketController {
         this.objectMapper = objectMapper;
         this.opRepo = opRepo;
         this.textRepo = textRepo;
+
+        // Coalesce bursty patch traffic: keep latest patch per room and broadcast at fixed cadence.
+        textPatchBroadcaster.scheduleAtFixedRate(() -> {
+            for (Map.Entry<String, WsMessage> entry : pendingTextPatches.entrySet()) {
+                if (pendingTextPatches.remove(entry.getKey(), entry.getValue())) {
+                    messaging.convertAndSend("/topic/write/room." + entry.getKey(), entry.getValue());
+                }
+            }
+        }, 40, 40, TimeUnit.MILLISECONDS);
+    }
+
+    @PreDestroy
+    public void shutdownBroadcaster() {
+        textPatchBroadcaster.shutdownNow();
     }
 
     // Example: clients publish to /app/room/{roomId}/msg
     @MessageMapping("/room/{roomId}/msg")
+    @Transactional
     public void onMessage(@DestinationVariable String roomId, @Payload WsMessage message,
                           @Header("simpSessionId") String sessionId) throws Exception {
 
@@ -51,7 +77,6 @@ public class WebSocketController {
                 break;
             case "stroke_end":
                 try {
-                    System.out.println("Processing stroke_end for room: " + roomId + ", strokeId: " + message.getStrokeId());
                     // persist to DB
                     DrawingOperation op = new DrawingOperation();
                     op.setRoomId(roomId);
@@ -59,31 +84,30 @@ public class WebSocketController {
                     op.setOperationType("stroke");
                     op.setPayload(objectMapper.valueToTree(message.getPayload())); // Convert to JsonNode
                     
-                    System.out.println("Saving operation to DB...");
                     opRepo.save(op);
-                    System.out.println("Successfully saved operation: " + op.getId());
                     
                     // broadcast
                     messaging.convertAndSend("/topic/room." + roomId, message);
                 } catch (Exception e) {
-                    System.err.println("FAILED to save stroke_end: " + e.getMessage());
-                    e.printStackTrace();
+                    logger.error("Failed to save stroke_end for room {} and stroke {}", roomId, message.getStrokeId(), e);
                     // Still broadcast to keep clients in sync even if DB fails? 
                     // Better to fail visibly? For now, let's try to broadcast anyway so users can draw
                     messaging.convertAndSend("/topic/room." + roomId, message);
                 }
                 break;
             case "text_update":
-                //delete all previous records
-                textRepo.deleteAllByRoomId(roomId);
-                //insert new one
-                TextOperation textOperation = new TextOperation();
+                // Update latest row in-place when possible (reduces write amplification and table churn).
+                TextOperation textOperation = textRepo.findTopByRoomIdOrderByIdDesc(roomId)
+                        .orElseGet(TextOperation::new);
                 textOperation.setRoomId(roomId);
                 textOperation.setUserId(message.getUserId());
                 textOperation.setPayload(objectMapper.valueToTree(message.getPayload())); // Convert to JsonNode
                 textRepo.save(textOperation);
 
                 messaging.convertAndSend("/topic/write/room." + roomId, message);
+                break;
+            case "text_patch":
+                pendingTextPatches.put(roomId, message);
                 break;
             case "clear":
                 try {
@@ -107,19 +131,12 @@ public class WebSocketController {
 
                     messaging.convertAndSend("/topic/room." + roomId, message);
                 } catch (Exception e) {
-                    System.out.println("Error processing clear operation "+ e);
+                    logger.error("Error processing clear operation for room {}", roomId, e);
                 }
                 break;
             default:
                 messaging.convertAndSend("/topic/room." + roomId, message);
         }
     }
-
-    @MessageMapping("/room/{roomId}/join")
-    public void Room(@DestinationVariable String roomId, @Payload WsMessage message,
-                          @Header("simpSessionId") String sessionId) throws Exception{
-
-    }
-
 
 }

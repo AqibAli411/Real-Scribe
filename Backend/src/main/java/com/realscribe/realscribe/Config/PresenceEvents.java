@@ -6,6 +6,8 @@ import com.realscribe.realscribe.DTO.ChatMessage;
 import com.realscribe.realscribe.DTO.ChatEvent;
 import com.realscribe.realscribe.Service.PresenceService;
 import com.realscribe.realscribe.Service.ChatService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
@@ -16,6 +18,7 @@ import java.util.List;
 
 @Component
 public class PresenceEvents {
+    private static final Logger logger = LoggerFactory.getLogger(PresenceEvents.class);
 
     private final PresenceService presence;
     private final ChatService chatService;
@@ -35,10 +38,10 @@ public class PresenceEvents {
             String userId = (String) sha.getSessionAttributes().get("userId");
             String name = (String) sha.getSessionAttributes().get("name");
 
-            System.out.println("Session disconnecting: " + sessionId + " for user: " + name + " (ID: " + userId + ")");
+            logger.debug("presence_disconnect_event sessionId={} userId={}", sessionId, userId);
 
             presence.leaveBySession(sessionId).ifPresent(binding -> {
-                System.out.println("User truly left room: " + binding.name() + " from room: " + binding.roomId());
+                logger.info("presence_user_left roomId={} user={}", binding.roomId(), binding.name());
 
                 // Create system message for user leaving
                 try {
@@ -51,7 +54,7 @@ public class PresenceEvents {
                     broker.convertAndSend("/topic/room." + binding.roomId() + ".chat",
                             new ChatEvent("system_message", binding.roomId(), systemMessage, null));
                 } catch (Exception e) {
-                    System.err.println("Error creating system message for user leave: " + e.getMessage());
+                    logger.warn("presence_leave_system_message_failed roomId={} error={}", binding.roomId(), e.toString());
                 }
 
                 // Broadcast presence leave event
@@ -61,12 +64,11 @@ public class PresenceEvents {
                             new PresenceEvent("presence_leave", binding.roomId(),
                                     new UserPresence(binding.userId(), binding.name()), users));
                 } catch (Exception e) {
-                    System.err.println("Error broadcasting presence leave: " + e.getMessage());
+                    logger.warn("presence_leave_broadcast_failed roomId={} error={}", binding.roomId(), e.toString());
                 }
             });
         } catch (Exception e) {
-            System.err.println("Error handling disconnect event: " + e.getMessage());
-            e.printStackTrace();
+            logger.error("presence_disconnect_handler_failed error={}", e.toString());
         }
     }
 }

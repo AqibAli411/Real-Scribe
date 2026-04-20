@@ -4,14 +4,16 @@ package com.realscribe.realscribe.Controller;
 import com.realscribe.realscribe.DTO.RoomDto;
 import com.realscribe.realscribe.Entity.Room;
 import com.realscribe.realscribe.Repo.RoomRepository;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 // /api/rooms
 @RequestMapping("/api/room")
-@CrossOrigin(origins = "https://real-scribe.vercel.app")
+@Validated
 public class RoomController {
     private final RoomRepository roomRepo;
 
@@ -21,7 +23,7 @@ public class RoomController {
 
     //for creating the room
     @PostMapping
-    public ResponseEntity<RoomDto> createRoom(@RequestBody RoomDto roomDto) {
+    public ResponseEntity<RoomDto> createRoom(@Valid @RequestBody RoomDto roomDto) {
         Room r = new Room();
         r.setDto(roomDto);
         roomRepo.save(r);
@@ -32,7 +34,14 @@ public class RoomController {
     //for joining the room
     @GetMapping("/{id}")
     @Transactional(readOnly = true)
-    public ResponseEntity<?> getRoom(@PathVariable String id) {
+    public ResponseEntity<?> getRoom(
+            @PathVariable
+            @jakarta.validation.constraints.Pattern(
+                    regexp = "^[A-Z0-9]{6}$",
+                    message = "Room id must be 6 uppercase alphanumeric characters"
+            )
+            String id
+    ) {
         return roomRepo.findById(id)
             .map(r -> ResponseEntity.ok(new RoomDto(r)))
             .orElse(ResponseEntity.notFound().build());

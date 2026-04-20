@@ -1,5 +1,5 @@
 // hooks/useCanvasRenderer.js
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { drawStrokePoints } from "../utils/drawingUtils";
 
 export function useCanvasRenderer(
@@ -256,8 +256,6 @@ export function useCanvasRenderer(
 
       if (color === "#000000" && isDarkRef.current) color = "#ffffff";
       if (color === "#ffffff" && !isDarkRef.current) color = "#000000";
-
-      console.log(toolRef.current);
 
       ctx.fillStyle = color;
       ctx.strokeStyle = color;

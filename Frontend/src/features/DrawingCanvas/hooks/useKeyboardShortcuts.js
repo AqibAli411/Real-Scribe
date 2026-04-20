@@ -5,6 +5,7 @@ export function useKeyboardShortcuts({
   isReady,
   publish,
   canUndo,
+  onUndo,
   onRedo,
   currentToolRef,
   isPanning,
@@ -25,18 +26,10 @@ export function useKeyboardShortcuts({
       const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
       const ctrlOrCmd = isMac ? e.metaKey : e.ctrlKey;
 
-      // Ctrl/Cmd + Z - Undo
+      // Ctrl/Cmd + Z - Undo (handled locally)
       if (ctrlOrCmd && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
-        //as user enters "ctrl + z" it should go back for ever user
-        //we will publish here -> subscribe method -> call undo method
-        if (!isReady) return;
-
-        // Undo is handled locally via useUndoRedo hook
-        // publish("/app/undo", { canUndo }); 
-        
-        return;
-
+        onUndo?.();
         return;
       }
 
@@ -50,10 +43,8 @@ export function useKeyboardShortcuts({
       // E - Toggle eraser
       if (e.key === "e" || e.key === "E") {
         e.preventDefault();
-
         currentToolRef.current =
           currentToolRef.current === "eraser" ? "pen" : "eraser";
-        console.log(currentToolRef.current);
         return;
       }
 
@@ -67,7 +58,6 @@ export function useKeyboardShortcuts({
       // Space - Pan mode (hold)
       if (e.key === " " || e.code === "Space") {
         e.preventDefault();
-        console.log("here");
         if (!isDownPressed.current) isPanning.current = true;
         return;
       }
@@ -94,6 +84,7 @@ export function useKeyboardShortcuts({
       }
     },
     [
+      onUndo,
       onRedo,
       onResetView,
       onZoomIn,

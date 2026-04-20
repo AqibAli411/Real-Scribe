@@ -1,5 +1,6 @@
 import * as React from "react";
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react";
+import { Step } from "@tiptap/pm/transform";
 
 // --- Tiptap Core Extensions ---
 import { StarterKit } from "@tiptap/starter-kit";
@@ -53,15 +54,15 @@ import { LinkIcon } from "@/components/tiptap-icons/link-icon";
 
 // --- Hooks ---
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useWindowSize } from "@/hooks/use-window-size";
 
 // --- Styles ---
 import "@/components/tiptap-templates/simple/simple-editor.scss";
 
 import { useWebSocket } from "../../../../../context/useWebSocketContext";
+import { getApiUrl } from "../../../../../utils/api";
 
-// Simplified debounce for publishing only
-function usePublishDebounce(callback, delay) {
+// Debounce helper with dynamic delay (network-adaptive).
+function usePublishDebounce(callback, getDelay) {
   const timeoutRef = React.useRef(null);
   const callbackRef = React.useRef(callback);
 
@@ -69,31 +70,29 @@ function usePublishDebounce(callback, delay) {
     callbackRef.current = callback;
   });
 
+  React.useEffect(
+    () => () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    },
+    [],
+  );
+
   return React.useMemo(
     () =>
       (...args) => {
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current);
         }
-        timeoutRef.current = setTimeout(
-          () => callbackRef.current(...args),
-          delay,
-        );
+        const delay = Number(getDelay?.() ?? 200);
+        timeoutRef.current = setTimeout(() => callbackRef.current(...args), delay);
       },
-    [delay],
+    [getDelay],
   );
 }
 
-const getApiUrl = () => {
-  const url = import.meta.env.VITE_API_URL;
-  if (!url || url === 'undefined' || url.includes('localhost')) {
-    return null;
-  }
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('http://')) {
-    return url.replace('http://', 'https://');
-  }
-  return url;
-};
+
 
 // Simplified toolbar - removed some heavy components
 const MainToolbarContent = React.memo(({ onLinkClick, isMobile }) => (
@@ -153,14 +152,22 @@ const MobileToolbarContent = React.memo(({ type, onBack }) => (
 ));
 
 function SimpleEditor({ roomId, userId, name }) {
+  const sameUser = (leftId, rightId) =>
+    String(leftId ?? "") === String(rightId ?? "");
+
   const isMobile = useIsMobile();
-  const windowSize = useWindowSize();
   const [mobileView, setMobileView] = React.useState("main");
 
   // Core refs
   const editorRef = React.useRef(null);
   const isMountedRef = React.useRef(false);
-  const isUpdatingFromWSRef = React.useRef(false);
+  const isApplyingRemoteRef = React.useRef(false);
+  const requiresSnapshotRef = React.useRef(false);
+  const pendingPatchStepsRef = React.useRef([]);
+  const networkProfileRef = React.useRef({
+    patchDelay: 120,
+    snapshotDelay: 1800,
+  });
   const lastPublishedContentRef = React.useRef("");
   const { connected, isReady, subscribe, unsubscribe, publish } =
     useWebSocket();
@@ -168,36 +175,58 @@ function SimpleEditor({ roomId, userId, name }) {
   // WebSocket message handler with typing protection
   const onWrite = React.useCallback(
     (message) => {
-      if (
-        !isMountedRef.current ||
-        !editorRef.current ||
-        isUpdatingFromWSRef.current
-      ) {
+      if (!isMountedRef.current || !editorRef.current) {
         return;
       }
 
       try {
-        const { payload, userId: userWhoText } = JSON.parse(message.body);
-        const newContent = payload.content;
-        const newContentStr = JSON.stringify(newContent);
+        const { type, payload, userId: userWhoText } = JSON.parse(message.body);
+        if (sameUser(userId, userWhoText)) return;
 
-        if (Number(userId) === Number(userWhoText)) return;
+        if (type === "text_patch" && Array.isArray(payload?.steps) && payload.steps.length) {
+          const editor = editorRef.current;
+          if (!editor?.state?.tr) return;
 
-        // Skip if content is the same
-        if (newContentStr === lastPublishedContentRef.current) {
+          isApplyingRemoteRef.current = true;
+          let tr = editor.state.tr;
+          let appliedAnyStep = false;
+
+          for (const stepJSON of payload.steps) {
+            try {
+              const step = Step.fromJSON(editor.state.schema, stepJSON);
+              tr = tr.step(step);
+              appliedAnyStep = true;
+            } catch (stepError) {
+              // Step desync can happen after packet loss/out-of-order messages.
+              requiresSnapshotRef.current = true;
+              console.warn("Skipping invalid remote text step:", stepError);
+              break;
+            }
+          }
+
+          if (appliedAnyStep && tr.docChanged) {
+            editor.view.dispatch(tr);
+            lastPublishedContentRef.current = JSON.stringify(editor.getJSON());
+          }
+          isApplyingRemoteRef.current = false;
           return;
         }
 
-        // Prevent feedback loop
-        isUpdatingFromWSRef.current = true;
+        if (type !== "text_update" || !payload?.content) {
+          return;
+        }
 
-        // Store current cursor position
+        if (!requiresSnapshotRef.current) {
+          return;
+        }
+
+        const newContent = payload.content;
+        const newContentStr = JSON.stringify(newContent);
+        if (newContentStr === lastPublishedContentRef.current) return;
+
+        isApplyingRemoteRef.current = true;
         const { from, to } = editorRef.current.state.selection;
-
-        // Apply update without triggering onUpdate
         editorRef.current.commands.setContent(newContent, false);
-
-        // Restore cursor if position is still valid
         requestAnimationFrame(() => {
           if (editorRef.current && isMountedRef.current) {
             const docSize = editorRef.current.state.doc.content.size;
@@ -205,11 +234,12 @@ function SimpleEditor({ roomId, userId, name }) {
               editorRef.current.commands.setTextSelection({ from, to });
             }
           }
-          isUpdatingFromWSRef.current = false;
+          requiresSnapshotRef.current = false;
+          isApplyingRemoteRef.current = false;
         });
       } catch (error) {
         console.error("WebSocket update error:", error);
-        isUpdatingFromWSRef.current = false;
+        isApplyingRemoteRef.current = false;
       }
     },
     [userId],
@@ -227,18 +257,82 @@ function SimpleEditor({ roomId, userId, name }) {
     };
   }, [isReady, roomId, subscribe, unsubscribe, onWrite]);
 
-  // Publish with longer debounce to reduce network calls
-  const debouncedPublish = usePublishDebounce(
+  React.useEffect(() => {
+    const updateProfile = () => {
+      const conn = navigator?.connection || navigator?.mozConnection || navigator?.webkitConnection;
+      if (!conn) {
+        networkProfileRef.current = { patchDelay: 120, snapshotDelay: 1800 };
+        return;
+      }
+
+      const effectiveType = conn.effectiveType || "";
+      const rtt = Number(conn.rtt || 0);
+      const downlink = Number(conn.downlink || 0);
+      const lowNetwork =
+        Boolean(conn.saveData) ||
+        effectiveType === "2g" ||
+        effectiveType === "slow-2g" ||
+        rtt >= 250 ||
+        (downlink > 0 && downlink < 1.2);
+
+      if (lowNetwork) {
+        networkProfileRef.current = { patchDelay: 360, snapshotDelay: 4200 };
+        return;
+      }
+
+      const mediumNetwork =
+        effectiveType === "3g" || rtt >= 140 || (downlink > 0 && downlink < 3.5);
+      if (mediumNetwork) {
+        networkProfileRef.current = { patchDelay: 230, snapshotDelay: 3000 };
+        return;
+      }
+
+      networkProfileRef.current = { patchDelay: 120, snapshotDelay: 1800 };
+    };
+
+    updateProfile();
+    const conn = navigator?.connection || navigator?.mozConnection || navigator?.webkitConnection;
+    if (!conn?.addEventListener) return;
+    conn.addEventListener("change", updateProfile);
+    return () => conn.removeEventListener("change", updateProfile);
+  }, []);
+
+  const debouncedPublishPatch = usePublishDebounce(
+    React.useCallback(() => {
+      if (
+        !connected ||
+        !isMountedRef.current ||
+        isApplyingRemoteRef.current ||
+        !pendingPatchStepsRef.current.length
+      ) {
+        return;
+      }
+
+      const steps = pendingPatchStepsRef.current.splice(0, pendingPatchStepsRef.current.length);
+      publish(`/app/room/${roomId}/msg`, {
+        type: "text_patch",
+        userId,
+        roomId,
+        payload: { steps },
+      });
+    }, [connected, roomId, userId, publish]),
+    () => networkProfileRef.current.patchDelay,
+  );
+
+  // Lower frequency full snapshots for persistence/fallback sync.
+  const debouncedPublishSnapshot = usePublishDebounce(
     React.useCallback(
-      (content) => {
+      () => {
         if (
           !connected ||
           !isMountedRef.current ||
-          isUpdatingFromWSRef.current
+          isApplyingRemoteRef.current ||
+          !editorRef.current
         ) {
           return;
         }
 
+        const content = editorRef.current.getJSON();
         const contentStr = JSON.stringify(content);
         if (contentStr === lastPublishedContentRef.current) {
           return;
@@ -249,7 +343,7 @@ function SimpleEditor({ roomId, userId, name }) {
             type: "text_update",
             userId,
             roomId,
-            payload: { content },
+            payload: { content, sync: true },
           });
           lastPublishedContentRef.current = contentStr;
         } catch (error) {
@@ -258,16 +352,26 @@ function SimpleEditor({ roomId, userId, name }) {
       },
       [connected, roomId, userId, publish],
     ),
-    200, // Longer debounce to reduce network calls
+    () => networkProfileRef.current.snapshotDelay,
   );
 
   // Editor with minimal extensions for better performance
   const editor = useEditor(
     {
-      onUpdate({ editor }) {
-        if (!isUpdatingFromWSRef.current && isMountedRef.current) {
-          // markUserTyping();
-          debouncedPublish(editor.getJSON());
+      onUpdate() {
+        if (!isApplyingRemoteRef.current && isMountedRef.current) {
+          debouncedPublishSnapshot();
+        }
+      },
+      onTransaction({ transaction }) {
+        if (!isMountedRef.current || isApplyingRemoteRef.current || !transaction.docChanged) {
+          return;
+        }
+
+        if (transaction.steps?.length) {
+          const serialized = transaction.steps.map((step) => step.toJSON());
+          pendingPatchStepsRef.current.push(...serialized);
+          debouncedPublishPatch();
         }
       },
       onCreate({ editor }) {
@@ -326,23 +430,22 @@ function SimpleEditor({ roomId, userId, name }) {
     isMountedRef.current = true;
     async function fetchText() {
       const apiUrl = getApiUrl();
-      if (!apiUrl || !roomId) {
-        console.error('Cannot fetch text: API URL or roomId is not configured', { apiUrl, roomId });
+      if (!roomId) {
+        console.error("Cannot fetch text: roomId is not configured");
         return;
       }
 
       const textUrl = `${apiUrl}/api/text/latest/${roomId}`;
-      console.log('Fetching text from:', textUrl);
 
       try {
         const response = await fetch(textUrl);
         if (!response.ok) return;
 
         const data = await response.json();
-        console.log(data);
-
+        if (!editorRef.current) return;
         if (data.exists && data.content) {
           editorRef.current.commands.setContent(data.content.content, false);
+          lastPublishedContentRef.current = JSON.stringify(data.content.content);
         } else {
           editorRef.current.commands.setContent(
             {
@@ -368,6 +471,7 @@ function SimpleEditor({ roomId, userId, name }) {
             },
             false,
           );
+          lastPublishedContentRef.current = JSON.stringify(editorRef.current.getJSON());
         }
       } catch (err) {
         console.error(err);
