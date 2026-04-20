@@ -232,17 +232,12 @@ function ChatSection({
                 <div className="flex h-full flex-col items-center justify-center text-center">
                   <Bot className="mb-4 h-16 w-16 text-blue-500" />
                   <h3 className="mb-2 text-lg font-medium text-gray-900 dark:text-neutral-100">
-                    AI Assistant Ready
+                    Coming Soon
                   </h3>
                   <p className="mb-4 text-gray-500 dark:text-neutral-400">
-                    Ask me anything about your project or get help with
-                    collaboration.
+                    AI assistant features are under development and will be
+                    available in an upcoming release.
                   </p>
-                  <div className="space-y-2 text-sm text-gray-400 dark:text-neutral-500">
-                    <p>• Generate ideas and suggestions</p>
-                    <p>• Help with project planning</p>
-                    <p>• Answer questions about collaboration</p>
-                  </div>
                 </div>
               )}
             </div>
